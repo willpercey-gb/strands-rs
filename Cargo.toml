@@ -1,0 +1,3 @@
+[workspace]
+members = ["strands-core", "strands-ollama", "strands-macros"]
+resolver = "2"
