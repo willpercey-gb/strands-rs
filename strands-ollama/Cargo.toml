@@ -3,6 +3,8 @@ name = "strands-ollama"
 version = "0.1.0"
 edition = "2021"
 description = "Ollama model adapter for strands-core"
+license = "Apache-2.0"
+repository = "https://github.com/willpercey-gb/strands-rs"
 
 [dependencies]
 strands-core = { path = "../strands-core", default-features = false }

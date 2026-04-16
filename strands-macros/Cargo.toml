@@ -3,6 +3,8 @@ name = "strands-macros"
 version = "0.1.0"
 edition = "2021"
 description = "Proc macros for strands-core (#[tool] attribute)"
+license = "Apache-2.0"
+repository = "https://github.com/willpercey-gb/strands-rs"
 
 [lib]
 proc-macro = true

@@ -3,6 +3,8 @@ name = "strands-core"
 version = "0.1.0"
 edition = "2021"
 description = "Core agent framework — Rust port of AWS Strands Agents"
+license = "Apache-2.0"
+repository = "https://github.com/willpercey-gb/strands-rs"
 
 [dependencies]
 tokio = { version = "1", features = ["sync", "time", "macros"] }
