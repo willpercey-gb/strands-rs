@@ -29,11 +29,16 @@ pub struct ClaudeCliModel {
     /// `--bare` requires `ANTHROPIC_API_KEY` since OAuth/keychain are
     /// disabled — leave at `false` for OAuth-logged-in users.
     pub bare: bool,
+    /// When true, pass `--dangerously-skip-permissions`. Bypasses all
+    /// permission checks. Only safe in sandboxes with no internet
+    /// access — use with care.
+    pub dangerously_skip_permissions: bool,
 }
 
 impl ClaudeCliModel {
     /// Create a wrapper for the named model alias. Defaults: command =
-    /// `"claude"`, no system prompt, cwd inherited, `bare = false`.
+    /// `"claude"`, no system prompt, cwd inherited, `bare = false`,
+    /// `dangerously_skip_permissions = false`.
     pub fn new(model: impl Into<String>) -> Self {
         Self {
             command: "claude".into(),
@@ -41,6 +46,7 @@ impl ClaudeCliModel {
             system_prompt: None,
             cwd: None,
             bare: false,
+            dangerously_skip_permissions: false,
         }
     }
 
@@ -63,6 +69,15 @@ impl ClaudeCliModel {
         self.bare = bare;
         self
     }
+
+    /// Pass `--dangerously-skip-permissions` to the spawned subprocess.
+    /// Bypasses all permission prompts — useful for unattended /
+    /// sandboxed runs. The flag's name is intentionally loud; only use
+    /// when you understand the implications.
+    pub fn with_dangerously_skip_permissions(mut self, on: bool) -> Self {
+        self.dangerously_skip_permissions = on;
+        self
+    }
 }
 
 #[async_trait]
@@ -80,6 +95,7 @@ impl Model for ClaudeCliModel {
         let command = self.command.clone();
         let cwd = self.cwd.clone();
         let bare = self.bare;
+        let dangerously_skip_permissions = self.dangerously_skip_permissions;
         let system = system_prompt
             .map(|s| s.to_string())
             .or_else(|| self.system_prompt.clone());
@@ -94,6 +110,9 @@ impl Model for ClaudeCliModel {
             cmd.arg("--model").arg(&model);
             if bare {
                 cmd.arg("--bare");
+            }
+            if dangerously_skip_permissions {
+                cmd.arg("--dangerously-skip-permissions");
             }
             if let Some(sys) = &system {
                 cmd.arg("--append-system-prompt").arg(sys);
