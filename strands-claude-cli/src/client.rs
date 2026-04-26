@@ -4,7 +4,6 @@ use async_stream::try_stream;
 use async_trait::async_trait;
 use strands_core::model::{Model, ModelStream};
 use strands_core::types::message::{Message, Role};
-use strands_core::types::streaming::StreamEvent;
 use strands_core::types::tools::ToolSpec;
 use strands_core::StrandsError;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
