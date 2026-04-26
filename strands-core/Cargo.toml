@@ -7,7 +7,7 @@ license = "Apache-2.0"
 repository = "https://github.com/willpercey-gb/strands-rs"
 
 [dependencies]
-tokio = { version = "1", features = ["sync", "time", "macros"] }
+tokio = { version = "1", features = ["sync", "time", "macros", "fs"] }
 tokio-stream = "0.1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
