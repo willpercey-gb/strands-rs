@@ -108,6 +108,16 @@ impl Agent {
         self.messages.clear();
     }
 
+    /// Replace the entire conversation history. Useful when the agent
+    /// is owned by a worker task and the caller wants to seed prior
+    /// turns from an external store before calling `prompt`. The next
+    /// `prompt(input)` call will still append `input` as a user
+    /// message on top of whatever is set here, so do not include the
+    /// new prompt in `msgs`.
+    pub fn set_messages(&mut self, msgs: Vec<Message>) {
+        self.messages = msgs;
+    }
+
     /// Access the invocation state from the last prompt() call.
     pub fn invocation_state(&self) -> &serde_json::Value {
         &self.invocation_state
