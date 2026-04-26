@@ -91,6 +91,13 @@ impl Agent {
         self.cancel.store(true, Ordering::Relaxed);
     }
 
+    /// Borrow the shared cancel flag. Useful when the agent has been
+    /// moved into a worker task and the caller still needs a handle to
+    /// flip cancellation from outside (e.g. a UI cancel button).
+    pub fn cancel_handle(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
+    }
+
     /// Get the current conversation history.
     pub fn messages(&self) -> &[Message] {
         &self.messages
@@ -171,5 +178,49 @@ impl Tool for AgentTool {
         let text = result.text();
 
         Ok(ToolOutput::success(serde_json::Value::String(text)))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Model;
+    use crate::types::message::Message;
+    use crate::types::streaming::StreamEvent;
+    use crate::types::tools::ToolSpec;
+    use async_trait::async_trait;
+    use futures::stream;
+
+    /// A model that yields no events and exits with EndTurn — enough to
+    /// build a real Agent for the cancel-handle test.
+    struct EmptyModel;
+
+    #[async_trait]
+    impl Model for EmptyModel {
+        async fn stream(
+            &self,
+            _messages: &[Message],
+            _system_prompt: Option<&str>,
+            _tool_specs: &[ToolSpec],
+        ) -> Result<crate::model::ModelStream, StrandsError> {
+            let s = stream::iter(vec![Ok::<StreamEvent, StrandsError>(StreamEvent::MessageStop {
+                stop_reason: crate::types::streaming::StopReason::EndTurn,
+            })]);
+            Ok(Box::pin(s))
+        }
+    }
+
+    #[test]
+    fn cancel_handle_is_shared_with_internal_flag() {
+        let agent = Agent::builder()
+            .model(EmptyModel)
+            .build()
+            .expect("build agent");
+        let handle = agent.cancel_handle();
+        assert!(!handle.load(Ordering::Relaxed));
+        handle.store(true, Ordering::Relaxed);
+        // The agent's own cancel field reads the same value because they
+        // are clones of one Arc<AtomicBool>.
+        assert!(agent.cancel.load(Ordering::Relaxed));
     }
 }
