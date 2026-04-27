@@ -168,7 +168,7 @@ impl Model for ClaudeCliModel {
                     use tokio::io::AsyncReadExt;
                     let _ = stderr.read_to_string(&mut err_buf).await;
                 }
-                Err(StrandsError::Other(format!(
+                Err(strands_core::classify_cli_failure(format!(
                     "claude exited with status {status}: {err_buf}"
                 )))?;
             }

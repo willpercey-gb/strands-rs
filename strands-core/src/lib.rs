@@ -12,7 +12,7 @@ pub mod types;
 // Re-exports for convenience
 pub use agent::{Agent, AgentBuilder, AgentResult, CallbackHandler, RetryConfig};
 pub use conversation::ConversationManager;
-pub use error::{Result, StrandsError};
+pub use error::{classify_cli_failure, Result, StrandsError};
 pub use hooks::{Hook, HookEvent, HookRegistry};
 pub use model::Model;
 pub use plugin::Plugin;

@@ -4,6 +4,8 @@ members = [
     "strands-ollama",
     "strands-openrouter",
     "strands-claude-cli",
+    "strands-codex-cli",
+    "strands-gemini-cli",
     "strands-macros",
 ]
 resolver = "2"

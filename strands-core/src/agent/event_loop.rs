@@ -304,6 +304,12 @@ async fn call_model_with_retry(
         {
             Ok(result) => return Ok(result),
             Err(e) => {
+                // Quota / auth failures are guaranteed to fail again
+                // — short-circuit so the user pays once, not 4×.
+                if matches!(e, crate::error::StrandsError::Quota(_)) {
+                    warn!(cycle, error = %e, "Non-retryable provider error; surfacing immediately");
+                    return Err(e);
+                }
                 attempt += 1;
                 if attempt > retry_config.max_retries {
                     return Err(e);

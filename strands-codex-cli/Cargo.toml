@@ -1,0 +1,19 @@
+[package]
+name = "strands-codex-cli"
+version = "0.1.0"
+edition = "2021"
+description = "OpenAI Codex CLI (`codex exec --json`) one-shot model adapter for strands-core"
+license = "Apache-2.0"
+repository = "https://github.com/willpercey-gb/strands-rs"
+
+[dependencies]
+strands-core = { path = "../strands-core", default-features = false }
+tokio = { version = "1", features = ["sync", "process", "io-util", "macros"] }
+tokio-stream = "0.1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+thiserror = "2"
+futures = "0.3"
+async-trait = "0.1"
+async-stream = "0.3"
