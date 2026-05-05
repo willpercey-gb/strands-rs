@@ -1273,6 +1273,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "strands-claude-mcp"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "serde",
+ "serde_json",
+ "strands-core",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "strands-codex-cli"
 version = "0.1.0"
 dependencies = [

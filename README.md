@@ -58,6 +58,11 @@ async fn main() -> strands_core::Result<()> {
 |-------|-------------|
 | `strands-core` | Agent loop, tools, hooks, conversation/session management, multi-agent, plugins |
 | `strands-ollama` | Ollama model adapter (`/api/chat` with streaming + tool calling) |
+| `strands-openrouter` | OpenRouter model adapter (Anthropic/OpenAI/Google models with tool calling) |
+| `strands-claude-cli` | Claude Code CLI adapter — runs `claude -p` as a one-shot model |
+| `strands-codex-cli` | OpenAI Codex CLI adapter |
+| `strands-gemini-cli` | Gemini CLI adapter |
+| `strands-claude-mcp` | Expose your strands tools as a dynamic MCP server; auto-register with Claude Code |
 | `strands-macros` | `#[tool]` proc macro for ergonomic tool definition |
 
 ## Multi-Agent Example
@@ -109,6 +114,7 @@ Full user guide in [`docs/`](docs/):
 8. [Session Management](docs/08-session-management.md)
 9. [Plugins](docs/09-plugins.md)
 10. [Streaming](docs/10-streaming.md)
+11. [Claude MCP Bridge](docs/11-claude-mcp.md)
 
 ## License
 

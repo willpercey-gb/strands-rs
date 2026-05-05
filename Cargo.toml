@@ -7,5 +7,6 @@ members = [
     "strands-codex-cli",
     "strands-gemini-cli",
     "strands-macros",
+    "strands-claude-mcp",
 ]
 resolver = "2"

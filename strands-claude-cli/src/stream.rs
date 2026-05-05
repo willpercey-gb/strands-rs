@@ -161,16 +161,39 @@ impl ClaudeCliState {
                 }
             }
             "message_delta" => {
-                // Carries final stop_reason; emit MessageStop.
+                // Carries the stop_reason for the just-finished
+                // assistant message inside the CLI's stream. Note that
+                // a single `claude -p` invocation can produce SEVERAL
+                // assistant messages — text → tool → text — and each
+                // one ends in its own `message_delta`. The intermediate
+                // ones have stop_reason="tool_use" and mean "I'm
+                // pausing to run a tool, more text follows"; only the
+                // final one (end_turn / max_tokens / stop_sequence)
+                // actually terminates the response.
+                //
+                // We close the current text block on every
+                // message_delta so the consumer flushes its buffer,
+                // and bump `text_block_index` so the NEXT internal
+                // turn's text streams as a fresh content block (not as
+                // a re-open of the previous one — downstream consumers
+                // treat that as overwriting the bubble). But we only
+                // emit MessageStop on the terminal stop_reason; an
+                // intermediate ToolUse would otherwise tell the agent
+                // loop the turn is over while the CLI keeps streaming.
                 let reason = event
                     .get("delta")
                     .and_then(|d| d.get("stop_reason"))
                     .and_then(|s| s.as_str())
                     .unwrap_or("end_turn");
                 self.close_text_block(&mut out);
-                out.push(StreamEvent::MessageStop {
-                    stop_reason: map_stop_reason(reason),
-                });
+                let mapped = map_stop_reason(reason);
+                if matches!(mapped, StopReason::ToolUse) {
+                    self.text_block_index += 1;
+                } else {
+                    out.push(StreamEvent::MessageStop {
+                        stop_reason: mapped,
+                    });
+                }
             }
             "message_stop" => {
                 // Already handled via message_delta in most flows; this
@@ -312,6 +335,73 @@ mod tests {
         assert!(assembled.starts_with("<thinking>"));
         assert!(assembled.contains("</thinking>"));
         assert!(assembled.ends_with("answer"));
+    }
+
+    /// Multi-turn flow: text → tool_use → text inside one CLI run.
+    /// Regression for an earlier bug where the second turn's text
+    /// streamed into the same `text_block_index` as the first, causing
+    /// the consumer to overwrite the first message rather than append
+    /// a new one.  The intermediate `message_delta` (stop_reason
+    /// "tool_use") MUST NOT emit a MessageStop — that's a real terminal
+    /// signal to the strands agent loop.
+    #[test]
+    fn multi_turn_assigns_distinct_block_indices_and_one_terminal_stop() {
+        let events = run(&[
+            r#"{"type":"stream_event","event":{"type":"message_start"}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"checking…"}}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"tool_use"}}}"#,
+            // Tool runs internally; CLI then continues with a new message.
+            r#"{"type":"stream_event","event":{"type":"message_start"}}"#,
+            r#"{"type":"stream_event","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"done."}}}"#,
+            r#"{"type":"stream_event","event":{"type":"message_delta","delta":{"stop_reason":"end_turn"}}}"#,
+        ]);
+
+        // Only ONE MessageStop, and it's the terminal EndTurn — the
+        // intermediate tool_use stop_reason is suppressed.
+        let stops: Vec<&StopReason> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::MessageStop { stop_reason } => Some(stop_reason),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(stops.len(), 1, "expected one MessageStop, got {stops:?}");
+        assert!(matches!(stops[0], StopReason::EndTurn));
+
+        // The two turns' text deltas land on DIFFERENT block indices
+        // so the downstream consumer doesn't overwrite the first turn.
+        let mut indices: Vec<usize> = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::ContentBlockDelta {
+                    index,
+                    delta: DeltaContent::TextDelta(_),
+                } => Some(*index),
+                _ => None,
+            })
+            .collect();
+        indices.sort();
+        indices.dedup();
+        assert_eq!(
+            indices.len(),
+            2,
+            "multi-turn text deltas should span >1 block index, got {indices:?}"
+        );
+
+        // Both texts survive end-to-end.
+        let assembled: String = events
+            .iter()
+            .filter_map(|e| match e {
+                StreamEvent::ContentBlockDelta {
+                    delta: DeltaContent::TextDelta(t),
+                    ..
+                } => Some(t.as_str()),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+            .join("");
+        assert!(assembled.contains("checking…"));
+        assert!(assembled.contains("done."));
     }
 
     #[test]
