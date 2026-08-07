@@ -17,6 +17,7 @@ pub struct Bridge {
     name: String,
     port: u16,
     registry: ToolRegistry,
+    instructions: Option<Arc<str>>,
 }
 
 impl Bridge {
@@ -90,8 +91,9 @@ impl Bridge {
             let (stream, peer) = listener.accept().await?;
             tracing::debug!("strands-claude-mcp bridge: connection from {peer}");
             let registry = self.registry.clone();
+            let instructions = self.instructions.clone();
             tokio::spawn(async move {
-                if let Err(e) = handle_connection(stream, registry).await {
+                if let Err(e) = handle_connection(stream, registry, instructions).await {
                     tracing::debug!("strands-claude-mcp bridge: connection error: {e}");
                 }
             });
@@ -102,6 +104,7 @@ impl Bridge {
 async fn handle_connection(
     stream: tokio::net::TcpStream,
     registry: ToolRegistry,
+    instructions: Option<Arc<str>>,
 ) -> std::io::Result<()> {
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
@@ -112,6 +115,9 @@ async fn handle_connection(
             Ok(BridgeRequest::Ping) => json!({ "result": "pong" }),
             Ok(BridgeRequest::ListTools) => {
                 json!({ "result": registry.descriptors() })
+            }
+            Ok(BridgeRequest::Instructions) => {
+                json!({ "result": instructions.as_deref().unwrap_or("") })
             }
             Ok(BridgeRequest::CallTool { params }) => {
                 let result = registry.invoke(&params.name, params.arguments).await;
@@ -136,6 +142,7 @@ pub struct BridgeBuilder {
     name: String,
     port: Option<u16>,
     tools: HashMap<String, Arc<dyn Tool>>,
+    instructions: Option<Arc<str>>,
 }
 
 impl BridgeBuilder {
@@ -144,7 +151,22 @@ impl BridgeBuilder {
             name: name.into(),
             port: None,
             tools: HashMap::new(),
+            instructions: None,
         }
+    }
+
+    /// Server-level guidance surfaced in the MCP `initialize` result.
+    ///
+    /// Unlike tool descriptions, this lands unconditionally in every
+    /// connecting session's context before any tool schema is loaded. Tool
+    /// descriptions answer "how do I call this"; instructions are the only
+    /// place to answer "when should I reach for this server at all", which
+    /// a session that has never heard of your app cannot otherwise know.
+    ///
+    /// Keep it short — it is paid for on every session, relevant or not.
+    pub fn instructions(mut self, text: impl Into<String>) -> Self {
+        self.instructions = Some(Arc::from(text.into()));
+        self
     }
 
     /// Override the deterministic port. Most callers should leave this alone.
@@ -153,20 +175,25 @@ impl BridgeBuilder {
         self
     }
 
-    /// Add a strands tool. The tool's name is namespaced with the server
-    /// name (`<server>__<tool>`) so multiple bridges don't collide in
-    /// Claude's tool registry.
+    /// Add a strands tool, under its own name.
+    ///
+    /// Tools are deliberately **not** namespaced with the server name. MCP
+    /// clients already scope tools by server — Claude Code surfaces them as
+    /// `mcp__<server>__<tool>` — so a `<server>__<tool>` key here produced
+    /// `mcp__puml_studio__puml_studio__validate_puml`: eight wasted tokens
+    /// per tool and a name that reads like a bug.
+    ///
+    /// `descriptors()` and `invoke()` both key off this map, so what is
+    /// advertised and what is dispatched can never disagree.
     pub fn tool(mut self, tool: impl Tool + 'static) -> Self {
-        let prefixed = format!("{}__{}", self.name, tool.name());
-        self.tools.insert(prefixed, Arc::new(tool));
+        self.tools.insert(tool.name().to_string(), Arc::new(tool));
         self
     }
 
     /// Add an already-Arc'd tool — useful when the same tool is shared with
     /// a strands `Agent` via `.tool(...)` and the bridge.
     pub fn tool_arc(mut self, tool: Arc<dyn Tool>) -> Self {
-        let prefixed = format!("{}__{}", self.name, tool.name());
-        self.tools.insert(prefixed, tool);
+        self.tools.insert(tool.name().to_string(), tool);
         self
     }
 
@@ -178,6 +205,7 @@ impl BridgeBuilder {
             registry: ToolRegistry {
                 tools: Arc::new(self.tools),
             },
+            instructions: self.instructions,
         }
     }
 }

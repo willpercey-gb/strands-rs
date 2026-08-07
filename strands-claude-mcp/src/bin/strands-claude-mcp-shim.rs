@@ -107,7 +107,7 @@ fn dispatch(msg: &Value, args: &Args, client: &BridgeClient) -> Option<String> {
     let is_notification = id.is_none();
 
     let result: Result<Value, (i64, String)> = match method {
-        "initialize" => Ok(initialize_result(args)),
+        "initialize" => Ok(initialize_result(args, client)),
         "initialized" | "notifications/initialized" => {
             // No response.
             return None;
@@ -137,8 +137,8 @@ fn dispatch(msg: &Value, args: &Args, client: &BridgeClient) -> Option<String> {
     Some(envelope.to_string())
 }
 
-fn initialize_result(args: &Args) -> Value {
-    json!({
+fn initialize_result(args: &Args, client: &BridgeClient) -> Value {
+    let mut result = json!({
         "protocolVersion": MCP_PROTOCOL_VERSION,
         "capabilities": {
             "tools": {}
@@ -147,7 +147,22 @@ fn initialize_result(args: &Args) -> Value {
             "name": args.name,
             "version": env!("CARGO_PKG_VERSION"),
         }
-    })
+    });
+
+    // Server instructions, when the host set any. Fetched rather than passed
+    // as argv so the host can change the text without re-registering the
+    // server — the registration only carries `--name` and `--port`.
+    //
+    // A bridge that is unreachable or too old to know the request simply
+    // yields no instructions: `initialize` must still succeed, or the client
+    // loses the whole server over an optional field.
+    if let Ok(value) = client.call(&BridgeRequest::Instructions) {
+        if let Some(text) = value.as_str().filter(|t| !t.trim().is_empty()) {
+            result["instructions"] = json!(text);
+        }
+    }
+
+    result
 }
 
 fn list_tools(client: &BridgeClient) -> Result<Value, (i64, String)> {

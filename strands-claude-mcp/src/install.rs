@@ -62,18 +62,24 @@ pub fn find_shim_binary() -> Result<PathBuf, String> {
 ///
 /// The shim is invoked as `<shim> --name <name> --port <port>`. Claude spawns
 /// it as needed; the shim then connects to your in-process bridge.
+///
+/// We spawn `claude` directly (not via `sh -lc`) so the shim path is passed as
+/// a single argv entry. Otherwise paths with spaces (e.g.
+/// `/Applications/PuML Studio.app/...`) get split by the shell.
 pub fn install(name: &str, port: u16) -> Result<String, String> {
     let shim = find_shim_binary()?;
     let shim_str = shim.to_string_lossy().to_string();
 
-    // `claude mcp add` is idempotent only after `remove`; suppress remove errors
-    // on the first install via 2>/dev/null.
-    let cmd = format!(
-        "claude mcp remove {name} -s user 2>/dev/null; \
-         claude mcp add {name} -s user -- {shim_str} --name {name} --port {port}"
-    );
-    let out = Command::new("sh")
-        .args(["-lc", &cmd])
+    // Remove any prior registration; ignore failure (server may not exist yet).
+    let _ = Command::new("claude")
+        .args(["mcp", "remove", name, "-s", "user"])
+        .output();
+
+    let out = Command::new("claude")
+        .args([
+            "mcp", "add", name, "-s", "user", "--", &shim_str, "--name", name, "--port",
+            &port.to_string(),
+        ])
         .output()
         .map_err(|e| format!("spawn `claude mcp add`: {e} (is the Claude CLI installed?)"))?;
 
@@ -91,13 +97,9 @@ pub fn install(name: &str, port: u16) -> Result<String, String> {
 /// `claude mcp remove` exits non-zero if the server isn't registered, and
 /// callers usually don't care to distinguish that from a real failure.
 pub fn uninstall(name: &str) {
-    let _ = Command::new("sh")
-        .args([
-            "-lc",
-            &format!(
-                "claude mcp remove {name} -s user 2>/dev/null; \
-                 claude mcp remove {name} -s local 2>/dev/null"
-            ),
-        ])
-        .output();
+    for scope in ["user", "local"] {
+        let _ = Command::new("claude")
+            .args(["mcp", "remove", name, "-s", scope])
+            .output();
+    }
 }

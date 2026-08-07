@@ -17,10 +17,10 @@
 //! strands_claude_mcp::install("planner", bridge.port())?;
 //! ```
 //!
-//! Tools added to the bridge are exposed to Claude Code as MCP tools whose
-//! names are prefixed with the bridge's `name` (so the planner's
-//! `create_node` becomes `planner__create_node` to avoid collisions when
-//! multiple host apps register).
+//! Tools added to the bridge are exposed to Claude Code as MCP tools under
+//! their own names. The client scopes them by server — Claude Code surfaces
+//! the planner's `create_node` as `mcp__planner__create_node` — so the bridge
+//! does not add a second `planner__` namespace of its own.
 
 use std::collections::HashMap;
 use std::io::{BufRead, BufReader, Write};
@@ -70,6 +70,10 @@ pub struct ToolDescriptor {
 pub enum BridgeRequest {
     Ping,
     ListTools,
+    /// Server-level guidance returned in the MCP `initialize` result.
+    /// Reaches every connecting session before any tool is loaded, which
+    /// makes it the only place to say *when* to reach for these tools.
+    Instructions,
     CallTool {
         params: CallToolParams,
     },
@@ -136,9 +140,9 @@ impl BridgeClient {
 
 #[derive(Clone)]
 pub(crate) struct ToolRegistry {
-    /// `prefixed_name` → strands tool. Tool names are namespaced with the
-    /// bridge name to avoid collisions when more than one host app exposes
-    /// tools with overlapping names.
+    /// Tool name → strands tool. Keys are the tools' own names; the MCP
+    /// client namespaces by server, so collisions between host apps are
+    /// already handled a layer up.
     pub tools: Arc<HashMap<String, Arc<dyn Tool>>>,
 }
 
@@ -146,10 +150,10 @@ impl ToolRegistry {
     pub fn descriptors(&self) -> Vec<ToolDescriptor> {
         self.tools
             .iter()
-            .map(|(prefixed, t)| {
+            .map(|(name, t)| {
                 let spec = t.spec();
                 ToolDescriptor {
-                    name: prefixed.clone(),
+                    name: name.clone(),
                     description: spec.description,
                     input_schema: spec.input_schema,
                 }
