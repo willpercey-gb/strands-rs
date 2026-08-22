@@ -20,7 +20,7 @@ use super::Agent;
 
 /// Fluent builder for constructing an [`Agent`].
 pub struct AgentBuilder {
-    model: Option<Box<dyn Model>>,
+    model: Option<std::sync::Arc<dyn Model>>,
     tools: HashMap<String, Box<dyn Tool>>,
     system_prompt: Option<SystemPrompt>,
     conversation_manager: Option<Box<dyn ConversationManager>>,
@@ -31,6 +31,10 @@ pub struct AgentBuilder {
     retry_config: RetryConfig,
     tool_executor: Option<Box<dyn ToolExecutor>>,
     limits: Limits,
+    model_middleware: crate::middleware::MiddlewareChain<
+        crate::middleware::InvokeModelContext,
+        crate::middleware::stages::InvokeModelResult,
+    >,
     name: Option<String>,
     description: Option<String>,
 }
@@ -49,6 +53,7 @@ impl AgentBuilder {
             retry_config: RetryConfig::default(),
             tool_executor: None,
             limits: Limits::none(),
+            model_middleware: crate::middleware::MiddlewareChain::new(),
             name: None,
             description: None,
         }
@@ -56,7 +61,32 @@ impl AgentBuilder {
 
     /// Set the model provider.
     pub fn model(mut self, model: impl Model + 'static) -> Self {
-        self.model = Some(Box::new(model));
+        self.model = Some(std::sync::Arc::new(model));
+        self
+    }
+
+    /// Use an already-shared model.
+    ///
+    /// Useful when the same model instance backs several agents, or is also
+    /// driving a summarizing conversation manager.
+    pub fn shared_model(mut self, model: std::sync::Arc<dyn Model>) -> Self {
+        self.model = Some(model);
+        self
+    }
+
+    /// Add middleware around every model invocation.
+    ///
+    /// Registration order is outermost-first. Middleware can rewrite the
+    /// request, swap the model for this call, short-circuit with a cached
+    /// response, or transform the result.
+    pub fn model_middleware(
+        mut self,
+        middleware: impl crate::middleware::Middleware<
+            crate::middleware::InvokeModelContext,
+            crate::middleware::stages::InvokeModelResult,
+        > + 'static,
+    ) -> Self {
+        self.model_middleware.push(middleware);
         self
     }
 
@@ -209,6 +239,7 @@ impl AgentBuilder {
                 .unwrap_or_else(|| Box::new(SequentialToolExecutor)),
             limits: self.limits,
             interrupts: crate::interrupt::InterruptState::new(),
+            model_middleware: std::sync::Arc::new(self.model_middleware),
             invocation_state: serde_json::Value::Object(serde_json::Map::new()),
             state: AgentState::new(),
             name: self.name,

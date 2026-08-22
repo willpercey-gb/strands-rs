@@ -216,7 +216,7 @@ impl Default for RetryConfig {
 /// Takes individual fields to avoid borrow conflicts on Agent.
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn run_loop(
-    model: &dyn Model,
+    model: std::sync::Arc<dyn Model>,
     tools: &HashMap<String, Box<dyn Tool>>,
     messages: &mut Vec<Message>,
     system_prompt: Option<&SystemPrompt>,
@@ -230,6 +230,10 @@ pub(crate) async fn run_loop(
     tool_executor: &dyn ToolExecutor,
     limits: &Limits,
     interrupts: &mut InterruptState,
+    model_middleware: &crate::middleware::MiddlewareChain<
+        crate::middleware::InvokeModelContext,
+        crate::middleware::stages::InvokeModelResult,
+    >,
 ) -> crate::Result<AgentResult> {
     let tool_specs: Vec<_> = tools.values().map(|t| t.spec()).collect();
     let tool_ctx = ToolContext {
@@ -309,11 +313,25 @@ pub(crate) async fn run_loop(
             .await?;
 
         // Model call with retry loop
-        let (content_blocks, model_stop_reason, cycle_usage, cycle_metrics) = call_model_with_retry(
-            model, messages, system_prompt, &tool_specs, hooks, callback_handler, cancel, cycle,
+        let outcome = call_model_with_retry(
+            &model,
+            messages,
+            system_prompt,
+            &tool_specs,
+            hooks,
+            callback_handler,
+            cancel,
+            cycle,
             retry_config,
+            model_middleware,
         )
         .await?;
+        let crate::middleware::ModelCallOutcome {
+            content: content_blocks,
+            stop_reason: model_stop_reason,
+            usage: cycle_usage,
+            metrics: cycle_metrics,
+        } = outcome;
 
         // Accumulate usage and metrics across cycles.
         total_usage.accumulate(&cycle_usage);
@@ -490,10 +508,39 @@ pub(crate) async fn run_loop(
     })
 }
 
+/// The operation at the end of the model middleware chain: the real call.
+struct ModelCallTerminal<'a> {
+    callback_handler: Option<&'a dyn CallbackHandler>,
+    cancel: &'a Arc<AtomicBool>,
+}
+
+impl crate::middleware::Terminal<
+        crate::middleware::InvokeModelContext,
+        crate::middleware::stages::InvokeModelResult,
+    > for ModelCallTerminal<'_>
+{
+    fn call<'a>(
+        &'a self,
+        ctx: crate::middleware::InvokeModelContext,
+    ) -> futures::future::BoxFuture<'a, crate::middleware::stages::InvokeModelResult> {
+        Box::pin(async move {
+            try_model_call(
+                ctx.model.as_ref(),
+                &ctx.messages,
+                ctx.system_prompt.as_ref(),
+                &ctx.tool_specs,
+                self.callback_handler,
+                self.cancel,
+            )
+            .await
+        })
+    }
+}
+
 /// Call the model with exponential backoff retry on error.
 #[allow(clippy::too_many_arguments)]
 async fn call_model_with_retry(
-    model: &dyn Model,
+    model: &std::sync::Arc<dyn Model>,
     messages: &[Message],
     system_prompt: Option<&SystemPrompt>,
     tool_specs: &[crate::types::tools::ToolSpec],
@@ -502,7 +549,11 @@ async fn call_model_with_retry(
     cancel: &Arc<AtomicBool>,
     cycle: usize,
     retry_config: &RetryConfig,
-) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage, Metrics)> {
+    model_middleware: &crate::middleware::MiddlewareChain<
+        crate::middleware::InvokeModelContext,
+        crate::middleware::stages::InvokeModelResult,
+    >,
+) -> crate::Result<crate::middleware::ModelCallOutcome> {
     let mut attempt = 0;
     let mut backoff_ms = retry_config.initial_backoff_ms;
 
@@ -510,9 +561,19 @@ async fn call_model_with_retry(
         hooks.dispatch(&mut HookEvent::BeforeModelCall { cycle });
         debug!(cycle, attempt, "Calling model");
 
-        match try_model_call(model, messages, system_prompt, tool_specs, callback_handler, cancel)
-            .await
-        {
+        let ctx = crate::middleware::InvokeModelContext {
+            messages: crate::types::message::messages_for_model(messages),
+            system_prompt: system_prompt.cloned(),
+            tool_specs: tool_specs.to_vec(),
+            model: model.clone(),
+            cycle,
+        };
+        let terminal = ModelCallTerminal {
+            callback_handler,
+            cancel,
+        };
+
+        match model_middleware.run(ctx, &terminal).await {
             Ok(result) => return Ok(result),
             Err(e) => {
                 // Quota / auth failures are guaranteed to fail again
@@ -549,10 +610,8 @@ async fn try_model_call(
     tool_specs: &[crate::types::tools::ToolSpec],
     callback_handler: Option<&dyn CallbackHandler>,
     cancel: &Arc<AtomicBool>,
-) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage, Metrics)> {
-    // Tracking ids and metadata are SDK bookkeeping — never send them upstream.
-    let outbound = crate::types::message::messages_for_model(messages);
-    let mut stream = model.stream(&outbound, system_prompt, tool_specs).await?;
+) -> crate::Result<crate::middleware::ModelCallOutcome> {
+    let mut stream = model.stream(messages, system_prompt, tool_specs).await?;
     let mut accumulator = StreamAccumulator::new();
     let mut stop_reason = StopReason::EndTurn;
     let mut usage = Usage::default();
@@ -587,6 +646,11 @@ async fn try_model_call(
         accumulator.handle_event(&event);
     }
 
-    Ok((accumulator.finalize(), stop_reason, usage, metrics))
+    Ok(crate::middleware::ModelCallOutcome {
+        content: accumulator.finalize(),
+        stop_reason,
+        usage,
+        metrics,
+    })
 }
 

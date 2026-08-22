@@ -1352,7 +1352,6 @@ impl Tool for DeleteTool {
 
 /// Approval hook: pauses the first time, then acts on the human's answer.
 fn approval_hook() -> impl strands_core::hooks::Hook {
-    use strands_core::hooks::events::BeforeToolCallEvent;
     use strands_core::hooks::HookEvent;
 
     |event: &mut HookEvent| {
@@ -1524,4 +1523,201 @@ async fn test_completed_run_does_not_leave_a_stale_interrupt() {
 
     agent.prompt("hello").await.unwrap();
     assert!(agent.pending_interrupts().is_empty());
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — model middleware
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_model_middleware_can_short_circuit_with_a_cached_response() {
+    use futures::future::BoxFuture;
+    use strands_core::middleware::stages::InvokeModelResult;
+    use strands_core::middleware::{InvokeModelContext, Middleware, ModelCallOutcome, Next};
+
+    /// Answers without ever reaching the model.
+    struct CacheHit {
+        hits: Arc<AtomicUsize>,
+    }
+
+    impl Middleware<InvokeModelContext, InvokeModelResult> for CacheHit {
+        fn handle<'a>(
+            &'a self,
+            _ctx: InvokeModelContext,
+            _next: Next<'a, InvokeModelContext, InvokeModelResult>,
+        ) -> BoxFuture<'a, InvokeModelResult> {
+            self.hits.fetch_add(1, Ordering::SeqCst);
+            Box::pin(async move {
+                Ok(ModelCallOutcome {
+                    content: vec![ContentBlock::Text {
+                        text: "from cache".to_string(),
+                    }],
+                    stop_reason: StopReason::EndTurn,
+                    usage: Usage::default(),
+                    metrics: Metrics::default(),
+                })
+            })
+        }
+    }
+
+    let model_calls = Arc::new(AtomicUsize::new(0));
+    let hits = Arc::new(AtomicUsize::new(0));
+
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: model_calls.clone(),
+            output_tokens: 1,
+        })
+        .tool(GreetTool)
+        .model_middleware(CacheHit { hits: hits.clone() })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("hello").await.unwrap();
+
+    assert_eq!(result.text(), "from cache");
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        model_calls.load(Ordering::SeqCst),
+        0,
+        "short-circuiting must skip the model entirely"
+    );
+}
+
+#[tokio::test]
+async fn test_model_middleware_can_rewrite_the_request_and_the_result() {
+    use futures::future::BoxFuture;
+    use std::sync::Mutex;
+    use strands_core::middleware::stages::InvokeModelResult;
+    use strands_core::middleware::{InvokeModelContext, Middleware, Next};
+
+    /// Injects a system prompt on the way in, uppercases text on the way out.
+    struct Rewriter {
+        seen_prompt: Arc<Mutex<Option<String>>>,
+    }
+
+    impl Middleware<InvokeModelContext, InvokeModelResult> for Rewriter {
+        fn handle<'a>(
+            &'a self,
+            mut ctx: InvokeModelContext,
+            next: Next<'a, InvokeModelContext, InvokeModelResult>,
+        ) -> BoxFuture<'a, InvokeModelResult> {
+            *self.seen_prompt.lock().unwrap() =
+                ctx.system_prompt.as_ref().and_then(|p| p.as_text());
+            ctx.system_prompt = Some(SystemPrompt::from("injected by middleware"));
+
+            Box::pin(async move {
+                let mut outcome = next.run(ctx).await?;
+                for block in &mut outcome.content {
+                    if let ContentBlock::Text { text } = block {
+                        *text = text.to_uppercase();
+                    }
+                }
+                Ok(outcome)
+            })
+        }
+    }
+
+    /// Reports back whatever system prompt it received.
+    struct EchoPromptModel;
+
+    #[async_trait]
+    impl Model for EchoPromptModel {
+        async fn stream(
+            &self,
+            _messages: &[Message],
+            system_prompt: Option<&SystemPrompt>,
+            _tool_specs: &[ToolSpec],
+        ) -> Result<ModelStream> {
+            let text = system_prompt
+                .and_then(|p| p.as_text())
+                .unwrap_or_else(|| "none".to_string());
+            let events = vec![
+                Ok(StreamEvent::ContentBlockStart {
+                    index: 0,
+                    content_type: ContentBlockType::Text,
+                }),
+                Ok(StreamEvent::ContentBlockDelta {
+                    index: 0,
+                    delta: DeltaContent::TextDelta(text),
+                }),
+                Ok(StreamEvent::ContentBlockStop { index: 0 }),
+                Ok(StreamEvent::MessageStop {
+                    stop_reason: StopReason::EndTurn,
+                }),
+            ];
+            Ok(Box::pin(stream::iter(events)))
+        }
+    }
+
+    let seen_prompt = Arc::new(Mutex::new(None));
+    let mut agent = Agent::builder()
+        .model(EchoPromptModel)
+        .system_prompt("original")
+        .model_middleware(Rewriter {
+            seen_prompt: seen_prompt.clone(),
+        })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("hi").await.unwrap();
+
+    assert_eq!(
+        seen_prompt.lock().unwrap().as_deref(),
+        Some("original"),
+        "middleware should observe the original request"
+    );
+    assert_eq!(
+        result.text(),
+        "INJECTED BY MIDDLEWARE",
+        "the rewritten prompt should reach the model and the result be transformed"
+    );
+}
+
+#[tokio::test]
+async fn test_model_middleware_can_swap_the_model_for_one_call() {
+    use futures::future::BoxFuture;
+    use strands_core::middleware::stages::InvokeModelResult;
+    use strands_core::middleware::{InvokeModelContext, Middleware, Next};
+
+    /// Routes the call to a different model. This is the mechanism model
+    /// routing and fallback are built on.
+    struct Router {
+        replacement: Arc<dyn Model>,
+    }
+
+    impl Middleware<InvokeModelContext, InvokeModelResult> for Router {
+        fn handle<'a>(
+            &'a self,
+            mut ctx: InvokeModelContext,
+            next: Next<'a, InvokeModelContext, InvokeModelResult>,
+        ) -> BoxFuture<'a, InvokeModelResult> {
+            ctx.model = self.replacement.clone();
+            Box::pin(async move { next.run(ctx).await })
+        }
+    }
+
+    let primary_calls = Arc::new(AtomicUsize::new(0));
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: primary_calls.clone(),
+            output_tokens: 1,
+        })
+        .tool(GreetTool)
+        .model_middleware(Router {
+            replacement: Arc::new(MockTextModel {
+                response: "from the replacement".to_string(),
+            }),
+        })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("hi").await.unwrap();
+
+    assert_eq!(result.text(), "from the replacement");
+    assert_eq!(
+        primary_calls.load(Ordering::SeqCst),
+        0,
+        "the original model must not be called"
+    );
 }

@@ -30,7 +30,7 @@ use crate::types::tools::ToolSpec;
 /// The core agent. Orchestrates model calls, tool execution,
 /// and conversation management in a ReAct loop.
 pub struct Agent {
-    pub(crate) model: Box<dyn Model>,
+    pub(crate) model: std::sync::Arc<dyn Model>,
     pub(crate) tools: HashMap<String, Box<dyn Tool>>,
     pub(crate) system_prompt: Option<SystemPrompt>,
     pub(crate) messages: Vec<Message>,
@@ -48,6 +48,13 @@ pub struct Agent {
     /// Interrupts raised and answered, retained across invocations so a
     /// resumed run can find its answers.
     pub(crate) interrupts: crate::interrupt::InterruptState,
+    /// Middleware wrapping each model invocation.
+    pub(crate) model_middleware: std::sync::Arc<
+        crate::middleware::MiddlewareChain<
+            crate::middleware::InvokeModelContext,
+            crate::middleware::stages::InvokeModelResult,
+        >,
+    >,
     /// Per-invocation state, persisted across cycles within a single prompt() call.
     pub(crate) invocation_state: serde_json::Value,
     /// User-defined persistent state, preserved across invocations and
@@ -76,7 +83,7 @@ impl Agent {
         self.messages.push(user_msg);
 
         let result = event_loop::run_loop(
-            self.model.as_ref(),
+            self.model.clone(),
             &self.tools,
             &mut self.messages,
             self.system_prompt.as_ref(),
@@ -90,6 +97,7 @@ impl Agent {
             self.tool_executor.as_ref(),
             &self.limits,
             &mut self.interrupts,
+            self.model_middleware.as_ref(),
         )
         .await?;
 
