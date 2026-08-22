@@ -159,6 +159,7 @@ mod tests {
                 metrics: Metrics::default(),
                 cycle_count: 1,
                 interrupts: Vec::new(),
+                telemetry: Default::default(),
             }),
             error: error.map(String::from),
             execution_time: Duration::from_millis(1500),

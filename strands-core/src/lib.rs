@@ -10,6 +10,7 @@ pub mod multiagent;
 pub mod plugin;
 pub mod session;
 pub mod storage;
+pub mod telemetry;
 pub mod tool;
 pub mod types;
 
@@ -25,6 +26,7 @@ pub use model::Model;
 pub use plugin::Plugin;
 pub use session::SessionManager;
 pub use storage::{InMemoryStorage, LocalFileStorage, Storage, StorageExt};
+pub use telemetry::{AgentMetrics, MetricsCollector};
 pub use tool::{FnTool, Tool, ToolContext, ToolOutput};
 pub use types::content::ContentBlock;
 pub use types::message::{Message, Role};

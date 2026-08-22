@@ -14,6 +14,13 @@ pub struct AgentResult {
     pub metrics: Metrics,
     /// How many model call cycles were executed.
     pub cycle_count: usize,
+    /// Per-cycle and per-tool telemetry for this invocation.
+    ///
+    /// Cycle metrics are collected by the loop. Tool metrics come from
+    /// `AfterToolCall`, which carries each call's measured duration — register a
+    /// hook feeding [`MetricsCollector::record_tool`](crate::MetricsCollector::record_tool)
+    /// to populate them.
+    pub telemetry: crate::telemetry::AgentMetrics,
     /// Interrupts awaiting a human answer.
     ///
     /// Non-empty exactly when `stop_reason` is

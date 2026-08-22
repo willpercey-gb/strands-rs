@@ -1721,3 +1721,47 @@ async fn test_model_middleware_can_swap_the_model_for_one_call() {
         "the original model must not be called"
     );
 }
+
+#[tokio::test]
+async fn test_telemetry_records_cycles_and_tool_calls() {
+    use strands_core::hooks::events::AfterToolCallEvent;
+    use strands_core::hooks::HookEvent;
+    use strands_core::MetricsCollector;
+    use std::sync::Mutex;
+
+    let collector = Arc::new(Mutex::new(MetricsCollector::new()));
+    let collector_hook = collector.clone();
+
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .tool(GreetTool)
+        .hook(move |event: &mut HookEvent| {
+            if let HookEvent::AfterToolCall(AfterToolCallEvent {
+                tool_name,
+                is_error,
+                duration,
+                ..
+            }) = event
+            {
+                collector_hook
+                    .lock()
+                    .unwrap()
+                    .record_tool(tool_name, *duration, *is_error);
+            }
+        })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("greet the world").await.unwrap();
+
+    // Cycle metrics come from the loop itself.
+    assert_eq!(result.telemetry.cycle_count(), 2);
+    assert_eq!(result.telemetry.stop_reason, Some(StopReason::EndTurn));
+
+    // Tool metrics come from the hook, which carries the measured duration.
+    let collector = collector.lock().unwrap();
+    assert_eq!(collector.snapshot().total_tool_calls(), 1);
+    assert_eq!(collector.snapshot().total_tool_errors(), 0);
+}

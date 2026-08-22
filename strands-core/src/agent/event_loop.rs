@@ -242,6 +242,7 @@ pub(crate) async fn run_loop(
 
     let mut total_usage = Usage::default();
     let mut total_metrics = Metrics::default();
+    let mut collector = crate::telemetry::MetricsCollector::new();
     #[allow(unused_assignments)]
     let mut stop_reason = StopReason::EndTurn;
     #[allow(unused_assignments)]
@@ -336,6 +337,11 @@ pub(crate) async fn run_loop(
         // Accumulate usage and metrics across cycles.
         total_usage.accumulate(&cycle_usage);
         total_metrics.accumulate(&cycle_metrics);
+        collector.record_cycle(
+            &cycle_usage,
+            &cycle_metrics,
+            content_blocks.iter().filter(|b| b.is_tool_use()).count(),
+        );
         stop_reason = model_stop_reason;
 
         // Build and append assistant message, stamped with a durable id and
@@ -498,7 +504,10 @@ pub(crate) async fn run_loop(
     // Update invocation state from tool context
     *invocation_state = tool_ctx.state;
 
+    collector.set_stop_reason(stop_reason);
+
     Ok(AgentResult {
+        telemetry: collector.finish(),
         interrupts: interrupts.pending(),
         stop_reason,
         message: last_assistant_message.unwrap_or_else(|| Message::assistant(vec![])),
