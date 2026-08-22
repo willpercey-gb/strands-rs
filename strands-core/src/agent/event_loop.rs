@@ -249,7 +249,6 @@ pub(crate) async fn run_loop(
     let mut last_assistant_message = None::<Message>;
     let mut cycle = 0;
     let mut hook_retries = 0usize;
-    let mut overflow_recovered = false;
 
     // BeforeInvocation — hooks can override messages
     let mut before_event = HookEvent::BeforeInvocation(BeforeInvocationEvent {
@@ -317,7 +316,9 @@ pub(crate) async fn run_loop(
         // Model call with retry loop
         // A context-window overflow is recoverable: reduce and try once more.
         // Without this the manager's overflow path is unreachable, and the
-        // invocation fails on something trimming would have fixed.
+        // invocation fails on something trimming would have fixed. The retry is
+        // inline and therefore inherently once per cycle — a manager that
+        // cannot reduce surfaces the error rather than looping.
         let outcome = match call_model_with_retry(
             &model,
             messages,
@@ -332,9 +333,8 @@ pub(crate) async fn run_loop(
         )
         .await
         {
-            Err(e) if e.is_context_overflow() && !overflow_recovered => {
+            Err(e) if e.is_context_overflow() => {
                 debug!(error = %e, "Context overflow; reducing and retrying once");
-                overflow_recovered = true;
                 conversation_manager
                     .reduce_context(messages, ReduceContext::overflow(system_prompt))
                     .await?;
@@ -354,10 +354,6 @@ pub(crate) async fn run_loop(
             }
             other => other?,
         };
-
-        // A successful call means the reduced history fits; allow one more
-        // recovery if the conversation grows past the limit again later.
-        overflow_recovered = false;
 
         let crate::middleware::ModelCallOutcome {
             content: content_blocks,
