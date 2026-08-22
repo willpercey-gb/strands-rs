@@ -2,6 +2,10 @@
 
 A Rust port of the [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python) — a model-driven framework for building AI agents that reason and act through tool use.
 
+> Aligned with upstream `python/v1.53.0`. See [`UPSTREAM.md`](UPSTREAM.md) for the
+> sync marker and [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md)
+> for the per-feature status.
+
 ## Features
 
 - **ReAct Agent Loop** — model reasoning + tool execution in a recursive cycle
@@ -13,7 +17,16 @@ A Rust port of the [AWS Strands Agents SDK](https://github.com/strands-agents/sd
 - **Session Persistence** — file-based or pluggable backend via `SessionRepository`
 - **Streaming** — real-time callback handler for text deltas and tool events
 - **Plugins** — bundle hooks + tools into reusable units
-- **Concurrent Tool Execution** — sequential or parallel tool dispatch
+- **Concurrent Tool Execution** — pluggable `ToolExecutor`; sequential, parallel or custom
+- **Middleware** — wrap model calls to cache, rate-limit, route or transform
+- **Interrupts** — pause mid-run for human approval, then resume
+- **Interventions** — allow/deny/escalate policy over tool calls, with HITL
+- **Structured Output** — schema-constrained answers via constrained decoding
+- **Model Routing & Fallback** — pick a model per call; fail over on error
+- **Long-term Memory** — searchable facts that outlive the conversation
+- **Storage** — one byte-oriented backend trait; in-memory and filesystem
+- **Checkpointing** — durable snapshots at turn boundaries
+- **Telemetry** — per-cycle and per-tool metrics, redacted by default
 
 ## Quickstart
 

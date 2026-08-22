@@ -12,7 +12,7 @@ sync is a diff rather than an archaeology dig.
 | Aligned to tag | `python/v1.53.0` |
 | Tag commit | `bc37995231143870c649a5c43fbdf798f5517786` |
 | Tag date | 2026-08-20 |
-| Sync in progress | yes — see [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md) |
+| Sync status | 59/80 tracked items landed — see [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md) for what remains and why |
 
 ### Previous alignment
 

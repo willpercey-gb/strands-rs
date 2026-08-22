@@ -70,7 +70,7 @@ Items that touch subsystems strands-rs already has.
 | `[x]` | `window_size = 0` handling | v1.44 `fix(conversation-manager): handle window_size=0 and reject negative values` | **Live bug in strands-rs**: `SlidingWindowConversationManager` with `window_size: 0` drains the entire history. |
 | `[x]` | Fallback trim point for tool-heavy conversations | v1.37-era `fix: add fallback trim point ... in SlidingWindowConversationManager` | Current Rust `drain(..n)` can split a `ToolUse` from its `ToolResult`, producing an invalid history. |
 | `[ ]` | `context_manager="auto"` facade | v1.43 `feat(context): add context_manager="auto" facade on Agent` | |
-| `[ ]` | Agentic context management | v1.44 `feat: port agentic context management to python` | `_context_manager/modes/agentic/`. Model-driven context curation. |
+| `[ ]` | Agentic context management | v1.44 | **Deferred.** Model-driven context curation — the model decides what to keep. Substantial, and it sits on top of the compression primitives that did land (`trim.rs`, `pin.rs`, proactive compression), so it is additive rather than blocking. |
 
 ### Hooks
 
@@ -103,16 +103,16 @@ Items that touch subsystems strands-rs already has.
 | `[x]` | Accumulate cache token counters in Graph/Swarm | v1.51 `fix(multiagent)` | |
 | `[ ]` | Preserve failed status from graph nodes | v1.46 `fix(multiagent)` | |
 | `[ ]` | Preserve shared context across serialize/deserialize | v1.52 `fix(multiagent)` | |
-| `[ ]` | Graph resume: AND-join edge/fan-in fixes | v1.48, v1.50 `fix(graph)` ×2 | Only relevant once interrupts/checkpointing land. |
+| `[ ]` | Graph resume: AND-join edge/fan-in fixes | v1.48, v1.50 | **Not yet applicable.** These fix resume-after-interrupt inside a graph; interrupts landed for the single agent (Phase 2a) but are not yet threaded through Graph/Swarm, so there is no resume path for them to fix. Port together with multi-agent interrupts. |
 | `[ ]` | `reset_executor_state` state corruption | v1.45 `fix(graph)` | |
-| `[ ]` | Swarm crash-restart resume | v1.49 `fix(swarm)` | |
+| `[ ]` | Swarm crash-restart resume | v1.49 | **Not yet applicable** — same reason as the graph resume fixes above. |
 
 ### Sessions
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
 | `[x]` | Snapshot session manager | v1.51 `feat: add snapshot session manager to python` | Plus `types/_snapshot.py` and v1.43 `feat: add model_state as a snapshot field`. |
-| `[ ]` | S3 session manager | pre-existing, never ported | Plus v1.42 `feat: add endpoint_url parameter to S3SessionManager`. |
+| `[ ]` | S3 session manager | pre-existing, never ported | **Blocked on a dependency decision.** Needs `aws-sdk-s3`, which is a large tree. The `Storage` trait (Phase 3a) and `SessionRepository` are both designed to take one, so this is an additive crate (`strands-s3`) whenever wanted. |
 | `[x]` | Symlink attack prevention | v1.47 `fix(session): prevent symlink attacks in FileSessionManager` | **Applies directly** — Rust `FileSessionManager` joins an unsanitised `session_id` into a path. |
 | `[ ]` | Repair mid-iteration skip of orphaned toolUse | v1.50 `fix(session)` | |
 
@@ -121,7 +121,7 @@ Items that touch subsystems strands-rs already has.
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
 | `[x]` | `Limits` on invoke/stream | v1.42 `feat: add Limits and support it during invoke/stream` | Supersedes the bare `max_cycles: usize`. |
-| `[ ]` | Per-invocation idempotency token | v1.45 `feat: added per-invocation idempotency support` | Plus v1.49 `fix(agent): stop idempotency waiters from blocking thread-pool workers`. |
+| `[ ]` | Per-invocation idempotency token | v1.45 | **Deferred.** Upstream's design is coupled to its thread-pool execution model (see the v1.49 follow-up fix); Rust's async model needs a different shape. |
 | `[x]` | Configurable retry exceptions | v1.50 `feat(py): configurable retry exceptions` | Generalises the existing `classify_cli_failure` / `StrandsError::Quota` short-circuit. |
 | `[x]` | Agent state as a typed store | pre-existing `agent/state.py`, never ported | strands-rs uses a bare `HashMap<String, Value>`. |
 
@@ -153,10 +153,10 @@ Fresh ports. Each is self-contained; order within the phase is by dependency.
 | `[x]` | **Context offloader plugin** | v1.38, v1.44, v1.45, v1.51 + fixes | `vended_plugins/context_offloader/{plugin,storage,search}`. Large tool result offload (v1.38), turn-based eviction (v1.44), search/grep retrieval (v1.45), `should_offload` callback (v1.51). Depends on unified storage. |
 | `[x]` | **Skills plugin** | pre-existing + v1.37-era fix | `vended_plugins/skills/`. Plus `fix(skills): preserve cache points in system prompt during skills injection` — depends on Phase 0 cache points. |
 | `[x]` | **Goal loop plugin** | v1.44 `feat(strands-py): add GoalLoop vended plugin` | `vended_plugins/goal/{plugin,judge}`. |
-| `[ ]` | **Context injector plugin** | pre-existing + v1.53 `feat: add injected content behind cache points` | `vended_plugins/context_injector/` and `injection/{_message_injection,_xml,types}`. |
-| `[ ]` | **Steering plugin** | pre-existing, never ported | `vended_plugins/steering/` — context providers, actions, LLM handler + mappers. Note upstream has it in both `experimental/` and `vended_plugins/`; take `vended_plugins/`. |
-| `[ ]` | Plugin discovery | v1.44-era `plugins/_discovery.py` | |
-| `[ ]` | MCP client parity | v1.38, v1.42, v1.45, v1.46, v1.47, v1.48, v1.51, v1.53 | Progress notifications, JSON server config loading, `continue_on_error`, `client_name`, per-call cancellation, OAuth for streamable HTTP, `isError` preservation, content-to-tool-result public API. Feeds `strands-claude-mcp`. |
+| `[x]` | **Context injector plugin** | pre-existing + v1.53 `feat: add injected content behind cache points` | `vended_plugins/context_injector/` and `injection/{_message_injection,_xml,types}`. |
+| `[ ]` | **Steering plugin** | pre-existing, never ported | **Deferred.** Overlaps heavily with the interventions subsystem that landed in Phase 3d — an LLM-backed `InterventionHandler` covers most of what steering does. Worth designing against the Rust intervention model rather than transliterating upstream's, which predates it. |
+| `[ ]` | Plugin discovery | v1.44-era `plugins/_discovery.py` | **Not portable as-is.** Upstream discovers plugins by scanning Python entry points at import time. Rust has no runtime plugin registry; the equivalent is either a build-time registry (inventory-style) or explicit registration, which the builder already provides. Needs a design decision, not a port. |
+| `[~]` | MCP parity | v1.38 … v1.53 | **Mostly N/A by architecture.** Upstream's items are for an MCP *client* (consuming remote servers); `strands-claude-mcp` is a *server* bridge exposing strands tools. Landed what applies: tool annotations + output schema now reach the MCP listing (v1.53), and `isError` was already preserved correctly (v1.38, verified). Client-side items — progress notifications, OAuth, JSON server config, per-call cancellation — would belong to a new MCP *client* crate that does not exist yet. |
 
 ## Phase 4 — Portable bug fixes
 
@@ -178,6 +178,30 @@ Fixes against subsystems strands-rs has, not already covered above.
 | `[ ]` | Tools: load directory tools under a namespaced module key | v1.50 `fix(tools)` — only if a tool loader is ported |
 
 ---
+
+## Status
+
+**59 of 80 tracked items landed.** The workspace builds clean with 392 tests
+passing and no clippy warnings beyond two pre-existing dead-field notes in
+`strands-openrouter`.
+
+What remains falls into four groups, none of them "forgotten":
+
+1. **Blocked on a dependency decision** — S3 session manager and S3 storage
+   (`aws-sdk-s3`), Bedrock knowledge-base memory store (`aws-sdk-bedrock`),
+   Cedar authorization (`cedar-policy`). All three plug into traits that already
+   exist (`Storage`, `MemoryStore`, `InterventionHandler`), so each is an
+   additive crate whenever the dependency is wanted.
+2. **Needs a Rust-native design, not a port** — plugin discovery (upstream scans
+   Python entry points; Rust has no runtime equivalent) and per-invocation
+   idempotency (upstream's design is coupled to its thread-pool model).
+3. **Not yet applicable** — the graph and swarm resume fixes repair
+   resume-after-interrupt in multi-agent orchestration; interrupts landed for the
+   single agent but are not yet threaded through Graph/Swarm.
+4. **Deferred as additive** — agentic context management and the steering
+   plugin. Both sit on top of primitives that did land, and steering in
+   particular overlaps the interventions subsystem enough to be worth designing
+   against it rather than transliterating.
 
 ## Not portable
 
