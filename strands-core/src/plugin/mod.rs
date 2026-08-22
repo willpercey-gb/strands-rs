@@ -1,5 +1,9 @@
+pub mod vended;
+
 use crate::hooks::HookRegistry;
 use crate::tool::Tool;
+
+pub use vended::{ContextOffloader, Skill, SkillSet};
 
 /// A plugin bundles hooks and tools into a reusable unit.
 ///
