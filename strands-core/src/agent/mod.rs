@@ -1,5 +1,7 @@
 use crate::types::content::SystemPrompt;
 mod builder;
+pub mod limits;
+pub mod state;
 pub mod callback;
 mod event_loop;
 mod result;
@@ -7,6 +9,8 @@ mod result;
 pub use builder::AgentBuilder;
 pub use callback::CallbackHandler;
 pub use event_loop::RetryConfig;
+pub use limits::Limits;
+pub use state::AgentState;
 pub use result::AgentResult;
 
 use std::collections::HashMap;
@@ -36,12 +40,15 @@ pub struct Agent {
     pub(crate) cancel: Arc<AtomicBool>,
     pub(crate) max_cycles: usize,
     pub(crate) retry_config: RetryConfig,
-    /// Whether to execute tools concurrently (default: false = sequential).
-    pub(crate) concurrent_tools: bool,
+    /// Strategy for running a batch of tool calls.
+    pub(crate) tool_executor: Box<dyn crate::tool::ToolExecutor>,
+    /// Per-invocation budget caps.
+    pub(crate) limits: Limits,
     /// Per-invocation state, persisted across cycles within a single prompt() call.
     pub(crate) invocation_state: serde_json::Value,
-    /// User-defined persistent state, preserved across invocations.
-    pub state: HashMap<String, serde_json::Value>,
+    /// User-defined persistent state, preserved across invocations and
+    /// persisted with the session.
+    pub state: AgentState,
     /// Agent name (used for identification in multi-agent patterns).
     pub name: Option<String>,
     /// Agent description (used for auto-conversion to tool).
@@ -76,7 +83,8 @@ impl Agent {
             self.max_cycles,
             &self.retry_config,
             &mut self.invocation_state,
-            self.concurrent_tools,
+            self.tool_executor.as_ref(),
+            &self.limits,
         )
         .await?;
 

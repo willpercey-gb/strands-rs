@@ -12,13 +12,14 @@ use crate::error::StrandsError;
 use crate::hooks::events::*;
 use crate::hooks::registry::HookRegistry;
 use crate::model::Model;
-use crate::tool::{Tool, ToolContext, ToolOutput};
-use crate::types::content::{ContentBlock, ReasoningContent, SystemPrompt, ToolResultContent, ToolResultStatus};
+use crate::tool::{Tool, ToolCall, ToolContext, ToolExecutor, ToolOutput};
+use crate::types::content::{ContentBlock, ReasoningContent, SystemPrompt, ToolResultStatus};
 use crate::types::message::{Message, Role};
 use crate::types::streaming::{
     ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
 };
 
+use super::limits::Limits;
 use super::result::AgentResult;
 
 /// Accumulates streaming events into complete content blocks.
@@ -225,7 +226,8 @@ pub(crate) async fn run_loop(
     max_cycles: usize,
     retry_config: &RetryConfig,
     invocation_state: &mut Value,
-    concurrent_tools: bool,
+    tool_executor: &dyn ToolExecutor,
+    limits: &Limits,
 ) -> crate::Result<AgentResult> {
     let tool_specs: Vec<_> = tools.values().map(|t| t.spec()).collect();
     let tool_ctx = ToolContext {
@@ -256,6 +258,15 @@ pub(crate) async fn run_loop(
     loop {
         if cycle >= max_cycles {
             return Err(StrandsError::MaxCycles(max_cycles));
+        }
+
+        // Budget caps are checked here, at a turn boundary, so any tools the
+        // previous turn requested have already produced results and the history
+        // stays re-invokable.
+        if let Some(reason) = limits.exceeded(cycle, &total_usage) {
+            debug!(?reason, cycle, "Invocation limit reached");
+            stop_reason = reason;
+            break;
         }
 
         if cancel.load(Ordering::Relaxed) {
@@ -385,13 +396,22 @@ pub(crate) async fn run_loop(
             tool_uses
                 .iter()
                 .map(|(id, _, _)| {
-                    tool_output_to_content_block(id, &ToolOutput::error("Tool batch cancelled"))
+                    crate::tool::executor::to_result_block(
+                        id,
+                        &ToolOutput::error("Tool batch cancelled"),
+                    )
                 })
                 .collect()
-        } else if concurrent_tools {
-            execute_tools_concurrent(tools, &tool_uses, &tool_ctx, hooks).await
         } else {
-            execute_tools_sequential(tools, &tool_uses, &tool_ctx, hooks).await
+            let calls: Vec<ToolCall<'_>> = tool_uses
+                .iter()
+                .map(|(id, name, input)| ToolCall {
+                    tool_use_id: id,
+                    name,
+                    input,
+                })
+                .collect();
+            tool_executor.execute(tools, &calls, &tool_ctx, hooks).await
         };
 
         // AfterTools — dispatched in reverse hook order.
@@ -553,172 +573,3 @@ async fn try_model_call(
     Ok((accumulator.finalize(), stop_reason, usage, metrics))
 }
 
-/// Execute a single tool, handling not-found gracefully.
-async fn execute_tool(
-    tools: &HashMap<String, Box<dyn Tool>>,
-    tool_name: &str,
-    input: &Value,
-    tool_ctx: &ToolContext,
-) -> ToolOutput {
-    match tools.get(tool_name) {
-        Some(tool) => {
-            debug!(tool_name, "Invoking tool");
-            match tool.invoke(input.clone(), tool_ctx).await {
-                Ok(output) => output,
-                Err(e) => {
-                    warn!(tool_name, error = %e, "Tool execution failed");
-                    ToolOutput::error(e.to_string())
-                }
-            }
-        }
-        None => {
-            warn!(tool_name, "Tool not found");
-            ToolOutput::error(format!("Tool not found: {tool_name}"))
-        }
-    }
-}
-
-/// Execute tool calls sequentially with hook support.
-async fn execute_tools_sequential(
-    tools: &HashMap<String, Box<dyn Tool>>,
-    tool_uses: &[(&str, &str, &Value)],
-    tool_ctx: &ToolContext,
-    hooks: &HookRegistry,
-) -> Vec<ContentBlock> {
-    let mut results = Vec::new();
-
-    for (tool_use_id, tool_name, input) in tool_uses {
-        let mut before_tool = HookEvent::BeforeToolCall(BeforeToolCallEvent {
-            tool_name: tool_name.to_string(),
-            input: (*input).clone(),
-            cancel: false,
-        });
-        hooks.dispatch(&mut before_tool);
-
-        let cancelled = matches!(
-            before_tool,
-            HookEvent::BeforeToolCall(BeforeToolCallEvent { cancel: true, .. })
-        );
-
-        let started = std::time::Instant::now();
-        let output = if cancelled {
-            debug!(tool_name, "Tool call cancelled by hook");
-            ToolOutput::error("Tool call cancelled")
-        } else {
-            execute_tool(tools, tool_name, input, tool_ctx).await
-        };
-        let duration = started.elapsed();
-
-        let mut after_tool = HookEvent::AfterToolCall(AfterToolCallEvent {
-            tool_name: tool_name.to_string(),
-            is_error: output.is_error,
-            duration,
-            retry: false,
-        });
-        hooks.dispatch(&mut after_tool);
-
-        let final_output =
-            if let HookEvent::AfterToolCall(AfterToolCallEvent { retry: true, .. }) = after_tool {
-                debug!(tool_name, "Hook requested tool retry");
-                execute_tool(tools, tool_name, input, tool_ctx).await
-            } else {
-                output
-            };
-
-        results.push(tool_output_to_content_block(tool_use_id, &final_output));
-    }
-
-    results
-}
-
-/// Execute tool calls concurrently with hook support.
-async fn execute_tools_concurrent(
-    tools: &HashMap<String, Box<dyn Tool>>,
-    tool_uses: &[(&str, &str, &Value)],
-    tool_ctx: &ToolContext,
-    hooks: &HookRegistry,
-) -> Vec<ContentBlock> {
-    // Fire BeforeToolCall hooks sequentially (they may cancel)
-    let mut tasks: Vec<(&str, &str, &Value, bool)> = Vec::new();
-    for (tool_use_id, tool_name, input) in tool_uses {
-        let mut before_tool = HookEvent::BeforeToolCall(BeforeToolCallEvent {
-            tool_name: tool_name.to_string(),
-            input: (*input).clone(),
-            cancel: false,
-        });
-        hooks.dispatch(&mut before_tool);
-
-        let cancelled = matches!(
-            before_tool,
-            HookEvent::BeforeToolCall(BeforeToolCallEvent { cancel: true, .. })
-        );
-        tasks.push((tool_use_id, tool_name, input, cancelled));
-    }
-
-    // Execute non-cancelled tools concurrently
-    let futures: Vec<_> = tasks
-        .iter()
-        .map(|(tool_use_id, tool_name, input, cancelled)| async move {
-            let started = std::time::Instant::now();
-            let output = if *cancelled {
-                ToolOutput::error("Tool call cancelled")
-            } else {
-                execute_tool(tools, tool_name, input, tool_ctx).await
-            };
-            (
-                *tool_use_id,
-                tool_name.to_string(),
-                *input,
-                output,
-                started.elapsed(),
-            )
-        })
-        .collect();
-
-    let outputs = futures::future::join_all(futures).await;
-
-    // Fire AfterToolCall hooks and build results
-    let mut results = Vec::new();
-    for (tool_use_id, tool_name, input, output, duration) in outputs {
-        let mut after_tool = HookEvent::AfterToolCall(AfterToolCallEvent {
-            tool_name: tool_name.clone(),
-            is_error: output.is_error,
-            duration,
-            retry: false,
-        });
-        hooks.dispatch(&mut after_tool);
-
-        let final_output =
-            if let HookEvent::AfterToolCall(AfterToolCallEvent { retry: true, .. }) = after_tool {
-                debug!(tool_name, "Hook requested tool retry");
-                // Retry with the *original* input — re-invoking with a
-                // different payload would run a different call than the
-                // one the hook asked to retry.
-                execute_tool(tools, &tool_name, input, tool_ctx).await
-            } else {
-                output
-            };
-
-        results.push(tool_output_to_content_block(tool_use_id, &final_output));
-    }
-
-    results
-}
-
-/// Convert a tool output to a ContentBlock::ToolResult.
-fn tool_output_to_content_block(tool_use_id: &str, output: &ToolOutput) -> ContentBlock {
-    let content_text = match &output.content {
-        Value::String(s) => s.clone(),
-        other => serde_json::to_string(other).unwrap_or_default(),
-    };
-
-    ContentBlock::ToolResult {
-        tool_use_id: tool_use_id.to_string(),
-        status: if output.is_error {
-            ToolResultStatus::Error
-        } else {
-            ToolResultStatus::Success
-        },
-        content: vec![ToolResultContent::Text { text: content_text }],
-    }
-}

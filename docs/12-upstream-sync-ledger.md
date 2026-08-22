@@ -87,10 +87,10 @@ Items that touch subsystems strands-rs already has.
 |---|------|----------|-------|
 | `[ ]` | Agent-as-tool delegation | v1.53 `feat(py): add agent-as-tool delegation` | `agent/_agent_delegation.py`. Richer than the current `AgentTool` wrapper — supports handing the sub-agent the live conversation rather than a fresh prompt. |
 | `[ ]` | Structured output | pre-existing upstream, never ported | `tools/structured_output/`. Schema-constrained responses via a synthetic tool. Sizeable. |
-| `[ ]` | Pluggable tool executors | pre-existing upstream, never ported | strands-rs has a `concurrent_tools: bool`; upstream has a `ToolExecutor` trait with concurrent/sequential impls. Needed before middleware's `ExecuteToolStage`. |
+| `[x]` | Pluggable tool executors | pre-existing upstream, never ported | strands-rs has a `concurrent_tools: bool`; upstream has a `ToolExecutor` trait with concurrent/sequential impls. Needed before middleware's `ExecuteToolStage`. |
 | `[ ]` | Bound tool schema normalization recursion | v1.49 `fix(core): bound tool schema normalization recursion depth` | |
 | `[x]` | Concurrent tool results in request order | v1.44 `fix(core): keep concurrent tool results in request order` | Rust `join_all` already preserves order — verify and note. |
-| `[ ]` | Do not synthesize exception for cancelled tools | v1.50 `fix(core): do not synthesize exception for cancelled tools` | |
+| `[x]` | Do not synthesize exception for cancelled tools | v1.50 `fix(core): do not synthesize exception for cancelled tools` | |
 | `[x]` | Retry re-invokes with original input | — | **Live bug in strands-rs**: `execute_tools_concurrent` retries with `Value::Null` instead of the original input (`event_loop.rs:962`). Sequential path is correct. |
 
 ### Multi-agent
@@ -120,10 +120,10 @@ Items that touch subsystems strands-rs already has.
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | `Limits` on invoke/stream | v1.42 `feat: add Limits and support it during invoke/stream` | Supersedes the bare `max_cycles: usize`. |
+| `[x]` | `Limits` on invoke/stream | v1.42 `feat: add Limits and support it during invoke/stream` | Supersedes the bare `max_cycles: usize`. |
 | `[ ]` | Per-invocation idempotency token | v1.45 `feat: added per-invocation idempotency support` | Plus v1.49 `fix(agent): stop idempotency waiters from blocking thread-pool workers`. |
 | `[ ]` | Configurable retry exceptions | v1.50 `feat(py): configurable retry exceptions` | Generalises the existing `classify_cli_failure` / `StrandsError::Quota` short-circuit. |
-| `[ ]` | Agent state as a typed store | pre-existing `agent/state.py`, never ported | strands-rs uses a bare `HashMap<String, Value>`. |
+| `[x]` | Agent state as a typed store | pre-existing `agent/state.py`, never ported | strands-rs uses a bare `HashMap<String, Value>`. |
 
 ## Phase 2 — Core architecture
 

@@ -1,3 +1,5 @@
+pub mod executor;
+
 use async_trait::async_trait;
 use serde_json::Value;
 use std::future::Future;
@@ -36,6 +38,10 @@ impl ToolOutput {
         }
     }
 }
+
+pub use executor::{
+    ConcurrentToolExecutor, SequentialToolExecutor, ToolCall, ToolExecutor,
+};
 
 /// Implement this trait to define a tool the agent can invoke.
 #[async_trait]

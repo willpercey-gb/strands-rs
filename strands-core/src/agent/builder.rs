@@ -10,10 +10,12 @@ use crate::hooks::{Hook, HookRegistry};
 use crate::model::Model;
 use crate::plugin::Plugin;
 use crate::session::SessionManager;
-use crate::tool::Tool;
+use crate::tool::{ConcurrentToolExecutor, SequentialToolExecutor, Tool, ToolExecutor};
 
 use super::callback::CallbackHandler;
 use super::event_loop::RetryConfig;
+use super::limits::Limits;
+use super::state::AgentState;
 use super::Agent;
 
 /// Fluent builder for constructing an [`Agent`].
@@ -27,7 +29,8 @@ pub struct AgentBuilder {
     callback_handler: Option<Box<dyn CallbackHandler>>,
     max_cycles: usize,
     retry_config: RetryConfig,
-    concurrent_tools: bool,
+    tool_executor: Option<Box<dyn ToolExecutor>>,
+    limits: Limits,
     name: Option<String>,
     description: Option<String>,
 }
@@ -44,7 +47,8 @@ impl AgentBuilder {
             callback_handler: None,
             max_cycles: 20,
             retry_config: RetryConfig::default(),
-            concurrent_tools: false,
+            tool_executor: None,
+            limits: Limits::none(),
             name: None,
             description: None,
         }
@@ -127,8 +131,30 @@ impl AgentBuilder {
     }
 
     /// Enable concurrent tool execution (default: sequential).
+    ///
+    /// Convenience over [`tool_executor`](Self::tool_executor) for the two
+    /// built-in strategies.
     pub fn concurrent_tools(mut self, enabled: bool) -> Self {
-        self.concurrent_tools = enabled;
+        self.tool_executor = Some(if enabled {
+            Box::new(ConcurrentToolExecutor)
+        } else {
+            Box::new(SequentialToolExecutor)
+        });
+        self
+    }
+
+    /// Set a custom tool execution strategy.
+    pub fn tool_executor(mut self, executor: impl ToolExecutor + 'static) -> Self {
+        self.tool_executor = Some(Box::new(executor));
+        self
+    }
+
+    /// Set per-invocation budget caps (turns, output tokens, total tokens).
+    ///
+    /// Supersedes [`max_cycles`](Self::max_cycles), which remains as a hard
+    /// backstop that errors rather than stopping cleanly.
+    pub fn limits(mut self, limits: Limits) -> Self {
+        self.limits = limits;
         self
     }
 
@@ -178,9 +204,12 @@ impl AgentBuilder {
             cancel: Arc::new(AtomicBool::new(false)),
             max_cycles: self.max_cycles,
             retry_config: self.retry_config,
-            concurrent_tools: self.concurrent_tools,
+            tool_executor: self
+                .tool_executor
+                .unwrap_or_else(|| Box::new(SequentialToolExecutor)),
+            limits: self.limits,
             invocation_state: serde_json::Value::Object(serde_json::Map::new()),
-            state: HashMap::new(),
+            state: AgentState::new(),
             name: self.name,
             description: self.description,
         })

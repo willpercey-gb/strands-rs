@@ -989,3 +989,183 @@ async fn test_hook_order_controls_dispatch_sequence() {
         "a lower order must run first regardless of registration order"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 — invocation limits
+// ---------------------------------------------------------------------------
+
+/// Always requests a tool, so the loop keeps turning until something stops it.
+struct AlwaysToolModel {
+    calls: Arc<AtomicUsize>,
+    output_tokens: u64,
+}
+
+#[async_trait]
+impl Model for AlwaysToolModel {
+    async fn stream(
+        &self,
+        _messages: &[Message],
+        _system_prompt: Option<&SystemPrompt>,
+        _tool_specs: &[ToolSpec],
+    ) -> Result<ModelStream> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        let events = vec![
+            Ok(StreamEvent::ContentBlockStart {
+                index: 0,
+                content_type: ContentBlockType::ToolUse {
+                    tool_use_id: "call_1".to_string(),
+                    name: "greet".to_string(),
+                    reasoning_signature: None,
+                },
+            }),
+            Ok(StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: DeltaContent::ToolInputDelta(r#"{"name":"World"}"#.to_string()),
+            }),
+            Ok(StreamEvent::ContentBlockStop { index: 0 }),
+            Ok(StreamEvent::Metadata {
+                usage: Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(self.output_tokens),
+                    ..Default::default()
+                },
+                metrics: Metrics::default(),
+            }),
+            Ok(StreamEvent::MessageStop {
+                stop_reason: StopReason::ToolUse,
+            }),
+        ];
+        Ok(Box::pin(stream::iter(events)))
+    }
+}
+
+#[tokio::test]
+async fn test_turn_limit_stops_cleanly_rather_than_erroring() {
+    use strands_core::agent::Limits;
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: calls.clone(),
+            output_tokens: 1,
+        })
+        .tool(GreetTool)
+        .limits(Limits::turns(3))
+        .max_cycles(100)
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("go").await.unwrap();
+
+    assert_eq!(result.stop_reason, StopReason::LimitTurns);
+    assert_eq!(calls.load(Ordering::SeqCst), 3);
+}
+
+#[tokio::test]
+async fn test_limit_leaves_history_reinvokable() {
+    use strands_core::agent::Limits;
+
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: Arc::new(AtomicUsize::new(0)),
+            output_tokens: 1,
+        })
+        .tool(GreetTool)
+        .limits(Limits::turns(2))
+        .max_cycles(100)
+        .build()
+        .unwrap();
+
+    agent.prompt("go").await.unwrap();
+
+    // Every ToolUse must have been answered — stopping mid-pair would leave a
+    // history the provider rejects on the next call.
+    let last = agent.messages().last().expect("history non-empty");
+    assert!(
+        !last.has_tool_use(),
+        "history must not end on an unanswered tool call: {last:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_total_token_limit_stops_the_loop() {
+    use strands_core::agent::Limits;
+
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: Arc::new(AtomicUsize::new(0)),
+            output_tokens: 40,
+        })
+        .tool(GreetTool)
+        .limits(Limits::default().with_total_tokens(100))
+        .max_cycles(100)
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("go").await.unwrap();
+    assert_eq!(result.stop_reason, StopReason::LimitTotalTokens);
+}
+
+#[tokio::test]
+async fn test_output_token_limit_stops_the_loop() {
+    use strands_core::agent::Limits;
+
+    let mut agent = Agent::builder()
+        .model(AlwaysToolModel {
+            calls: Arc::new(AtomicUsize::new(0)),
+            output_tokens: 60,
+        })
+        .tool(GreetTool)
+        .limits(Limits::default().with_output_tokens(100))
+        .max_cycles(100)
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("go").await.unwrap();
+    assert_eq!(result.stop_reason, StopReason::LimitOutputTokens);
+}
+
+#[tokio::test]
+async fn test_custom_tool_executor_is_used() {
+    use std::sync::Mutex;
+    use strands_core::tool::executor::to_result_block;
+    use strands_core::tool::{ToolCall, ToolExecutor};
+
+    /// Bypasses the tools entirely and answers every call itself.
+    struct StubExecutor {
+        used: Arc<Mutex<bool>>,
+    }
+
+    #[async_trait]
+    impl ToolExecutor for StubExecutor {
+        fn name(&self) -> &'static str {
+            "stub"
+        }
+        async fn execute(
+            &self,
+            _tools: &std::collections::HashMap<String, Box<dyn Tool>>,
+            calls: &[ToolCall<'_>],
+            _ctx: &ToolContext,
+            _hooks: &strands_core::hooks::HookRegistry,
+        ) -> Vec<ContentBlock> {
+            *self.used.lock().unwrap() = true;
+            calls
+                .iter()
+                .map(|c| to_result_block(c.tool_use_id, &ToolOutput::success(json!("stubbed"))))
+                .collect()
+        }
+    }
+
+    let used = Arc::new(Mutex::new(false));
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .tool(GreetTool)
+        .tool_executor(StubExecutor { used: used.clone() })
+        .build()
+        .unwrap();
+
+    agent.prompt("greet").await.unwrap();
+    assert!(*used.lock().unwrap(), "the custom executor should have run");
+}
