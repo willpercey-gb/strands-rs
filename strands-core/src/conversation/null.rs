@@ -1,10 +1,9 @@
-use crate::types::content::SystemPrompt;
 use async_trait::async_trait;
 
 use crate::error::StrandsError;
 use crate::types::message::Message;
 
-use super::ConversationManager;
+use super::{ConversationManager, ReduceContext};
 
 /// No-op conversation manager. Useful for short sessions where
 /// context overflow is not a concern.
@@ -15,7 +14,7 @@ impl ConversationManager for NullConversationManager {
     async fn reduce_context(
         &self,
         _messages: &mut Vec<Message>,
-        _system_prompt: Option<&SystemPrompt>,
+        _ctx: ReduceContext<'_>,
     ) -> Result<(), StrandsError> {
         Ok(())
     }

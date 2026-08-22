@@ -93,9 +93,18 @@ impl AgentBuilder {
         self
     }
 
-    /// Register a lifecycle hook.
+    /// Register a lifecycle hook at the default priority.
     pub fn hook(mut self, hook: impl Hook + 'static) -> Self {
         self.hooks.register(hook);
+        self
+    }
+
+    /// Register a lifecycle hook at an explicit priority.
+    ///
+    /// Lower runs first; see [`hooks::registry::order`](crate::hooks::registry::order)
+    /// for the named constants. Hooks sharing a priority keep registration order.
+    pub fn hook_with_order(mut self, hook: impl Hook + 'static, order: i32) -> Self {
+        self.hooks.register_with_order(hook, order);
         self
     }
 

@@ -7,7 +7,7 @@ use serde_json::Value;
 use tracing::{debug, warn};
 
 use crate::agent::callback::CallbackHandler;
-use crate::conversation::ConversationManager;
+use crate::conversation::{ConversationManager, ReduceContext};
 use crate::error::StrandsError;
 use crate::hooks::events::*;
 use crate::hooks::registry::HookRegistry;
@@ -262,8 +262,38 @@ pub(crate) async fn run_loop(
             return Err(StrandsError::Cancelled);
         }
 
-        // Reduce context before calling model
-        conversation_manager.reduce_context(messages, system_prompt).await?;
+        // Reduce context before calling the model.
+        //
+        // When the manager wants proactive compression, measure how full the
+        // window actually is first. `estimate_utilization` returns None when
+        // the model's limit is unknown, and that stays None all the way to the
+        // manager — "unknown" must not read as headroom.
+        let utilization = match conversation_manager.proactive_compression() {
+            Some(_) => {
+                let counted = model
+                    .count_tokens(messages, system_prompt, &tool_specs)
+                    .await
+                    .unwrap_or_else(|e| {
+                        // Token counting is an optimisation; a provider that
+                        // refuses should not fail the invocation.
+                        debug!(error = %e, "Token counting failed; skipping proactive compression");
+                        0
+                    });
+                if counted == 0 {
+                    None
+                } else {
+                    model.estimate_utilization(counted)
+                }
+            }
+            None => None,
+        };
+
+        conversation_manager
+            .reduce_context(
+                messages,
+                ReduceContext::routine(system_prompt).with_utilization(utilization),
+            )
+            .await?;
 
         // Model call with retry loop
         let (content_blocks, model_stop_reason, cycle_usage, cycle_metrics) = call_model_with_retry(
@@ -334,11 +364,59 @@ pub(crate) async fn run_loop(
         }
 
         let tool_uses = assistant_msg.tool_uses();
-        let tool_results = if concurrent_tools {
+
+        // BeforeTools — one decision point for the whole batch, ahead of any
+        // per-tool hook.
+        let mut before_tools = HookEvent::BeforeTools(BeforeToolsEvent {
+            tool_calls: tool_uses
+                .iter()
+                .map(|(id, name, _)| (id.to_string(), name.to_string()))
+                .collect(),
+            cancel: false,
+        });
+        hooks.dispatch(&mut before_tools);
+        let batch_cancelled = matches!(
+            before_tools,
+            HookEvent::BeforeTools(BeforeToolsEvent { cancel: true, .. })
+        );
+
+        let tool_results = if batch_cancelled {
+            debug!("Tool batch cancelled by hook");
+            tool_uses
+                .iter()
+                .map(|(id, _, _)| {
+                    tool_output_to_content_block(id, &ToolOutput::error("Tool batch cancelled"))
+                })
+                .collect()
+        } else if concurrent_tools {
             execute_tools_concurrent(tools, &tool_uses, &tool_ctx, hooks).await
         } else {
             execute_tools_sequential(tools, &tool_uses, &tool_ctx, hooks).await
         };
+
+        // AfterTools — dispatched in reverse hook order.
+        let mut after_tools = HookEvent::AfterTools(AfterToolsEvent {
+            results: tool_results
+                .iter()
+                .filter_map(|block| match block {
+                    ContentBlock::ToolResult {
+                        tool_use_id,
+                        status,
+                        ..
+                    } => Some((
+                        tool_use_id.clone(),
+                        *status == ToolResultStatus::Error,
+                    )),
+                    _ => None,
+                })
+                .collect(),
+            end_turn: false,
+        });
+        hooks.dispatch(&mut after_tools);
+        let end_turn = matches!(
+            after_tools,
+            HookEvent::AfterTools(AfterToolsEvent { end_turn: true, .. })
+        );
 
         let mut tool_result_msg = Message::new(Role::User, tool_results);
         tool_result_msg.ensure_tracking_id();
@@ -347,6 +425,12 @@ pub(crate) async fn run_loop(
         hooks.dispatch(&mut HookEvent::MessageAdded {
             message: tool_result_msg,
         });
+
+        if end_turn {
+            debug!("Hook requested end of turn after tool batch");
+            stop_reason = StopReason::EndTurn;
+            break;
+        }
     }
 
     // AfterInvocation — hooks can request resume
@@ -516,16 +600,19 @@ async fn execute_tools_sequential(
             HookEvent::BeforeToolCall(BeforeToolCallEvent { cancel: true, .. })
         );
 
+        let started = std::time::Instant::now();
         let output = if cancelled {
             debug!(tool_name, "Tool call cancelled by hook");
             ToolOutput::error("Tool call cancelled")
         } else {
             execute_tool(tools, tool_name, input, tool_ctx).await
         };
+        let duration = started.elapsed();
 
         let mut after_tool = HookEvent::AfterToolCall(AfterToolCallEvent {
             tool_name: tool_name.to_string(),
             is_error: output.is_error,
+            duration,
             retry: false,
         });
         hooks.dispatch(&mut after_tool);
@@ -572,12 +659,19 @@ async fn execute_tools_concurrent(
     let futures: Vec<_> = tasks
         .iter()
         .map(|(tool_use_id, tool_name, input, cancelled)| async move {
+            let started = std::time::Instant::now();
             let output = if *cancelled {
                 ToolOutput::error("Tool call cancelled")
             } else {
                 execute_tool(tools, tool_name, input, tool_ctx).await
             };
-            (*tool_use_id, tool_name.to_string(), *input, output)
+            (
+                *tool_use_id,
+                tool_name.to_string(),
+                *input,
+                output,
+                started.elapsed(),
+            )
         })
         .collect();
 
@@ -585,10 +679,11 @@ async fn execute_tools_concurrent(
 
     // Fire AfterToolCall hooks and build results
     let mut results = Vec::new();
-    for (tool_use_id, tool_name, input, output) in outputs {
+    for (tool_use_id, tool_name, input, output, duration) in outputs {
         let mut after_tool = HookEvent::AfterToolCall(AfterToolCallEvent {
             tool_name: tool_name.clone(),
             is_error: output.is_error,
+            duration,
             retry: false,
         });
         hooks.dispatch(&mut after_tool);

@@ -83,6 +83,11 @@ impl ClaudeCliModel {
 
 #[async_trait]
 impl Model for ClaudeCliModel {
+    /// The configured model id, used to resolve a context window limit.
+    fn model_id(&self) -> Option<&str> {
+        Some(&self.model)
+    }
+
     async fn stream(
         &self,
         messages: &[Message],

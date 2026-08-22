@@ -35,6 +35,13 @@ pub enum HookEvent {
     /// Hooks can set `retry` to re-invoke the model.
     AfterModelCall(AfterModelCallEvent),
 
+    /// Before executing a batch of tools requested by one assistant message.
+    ///
+    /// Fires once per cycle, ahead of any per-tool event. Hooks can set
+    /// `cancel` to skip the whole batch — cheaper and more predictable than
+    /// cancelling each tool individually.
+    BeforeTools(BeforeToolsEvent),
+
     /// Before executing a tool.
     /// Hooks can set `cancel` to skip tool execution.
     BeforeToolCall(BeforeToolCallEvent),
@@ -42,6 +49,22 @@ pub enum HookEvent {
     /// After executing a tool.
     /// Hooks can set `retry` to re-execute the tool.
     AfterToolCall(AfterToolCallEvent),
+
+    /// After a batch of tools has finished and results are ready.
+    ///
+    /// Dispatched in reverse hook order, so cleanup unwinds opposite to setup.
+    /// Hooks can set `end_turn` to halt the loop without another model call.
+    AfterTools(AfterToolsEvent),
+}
+
+impl HookEvent {
+    /// Whether this event unwinds in reverse hook order.
+    ///
+    /// Teardown events run last-registered-first so a hook tears down before
+    /// whatever it was layered on top of.
+    pub fn is_teardown(&self) -> bool {
+        matches!(self, HookEvent::AfterTools(_) | HookEvent::AfterInvocation(_))
+    }
 }
 
 #[derive(Debug)]
@@ -68,6 +91,22 @@ pub struct AfterModelCallEvent {
 }
 
 #[derive(Debug)]
+pub struct BeforeToolsEvent {
+    /// The tool calls the model requested, as `(tool_use_id, name)`.
+    pub tool_calls: Vec<(String, String)>,
+    /// Set to `true` to cancel every tool in this batch.
+    pub cancel: bool,
+}
+
+#[derive(Debug)]
+pub struct AfterToolsEvent {
+    /// Outcome of each tool in the batch, as `(tool_name, is_error)`.
+    pub results: Vec<(String, bool)>,
+    /// Set to `true` to end the turn without calling the model again.
+    pub end_turn: bool,
+}
+
+#[derive(Debug)]
 pub struct BeforeToolCallEvent {
     pub tool_name: String,
     pub input: Value,
@@ -79,6 +118,8 @@ pub struct BeforeToolCallEvent {
 pub struct AfterToolCallEvent {
     pub tool_name: String,
     pub is_error: bool,
+    /// How long the tool took to execute.
+    pub duration: std::time::Duration,
     /// Set to `true` to retry the tool execution.
     pub retry: bool,
 }

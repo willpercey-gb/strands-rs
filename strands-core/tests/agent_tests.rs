@@ -232,7 +232,7 @@ async fn test_fn_tool() {
 
 #[tokio::test]
 async fn test_sliding_window() {
-    use strands_core::conversation::SlidingWindowConversationManager;
+    use strands_core::conversation::{ReduceContext, SlidingWindowConversationManager};
 
     let cm = SlidingWindowConversationManager::new(3);
     let mut messages = vec![
@@ -243,7 +243,9 @@ async fn test_sliding_window() {
         Message::user("msg 3"),
     ];
 
-    cm.reduce_context(&mut messages, None).await.unwrap();
+    cm.reduce_context(&mut messages, ReduceContext::default())
+        .await
+        .unwrap();
     assert_eq!(messages.len(), 3);
     assert_eq!(messages[0].text(), "msg 2");
 }
@@ -780,5 +782,210 @@ async fn test_reasoning_signature_survives_as_its_own_block() {
         has_signature,
         "a reasoning block with empty text but a signature must be preserved: {:?}",
         result.message.content
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — batch tool hooks, ordering, duration
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_before_tools_can_cancel_the_whole_batch() {
+    use std::sync::Mutex;
+    use strands_core::hooks::events::BeforeToolsEvent;
+    use strands_core::hooks::HookEvent;
+
+    let invoked = Arc::new(Mutex::new(Vec::<serde_json::Value>::new()));
+
+    struct RecordingTool {
+        seen: Arc<Mutex<Vec<serde_json::Value>>>,
+    }
+
+    #[async_trait]
+    impl Tool for RecordingTool {
+        fn name(&self) -> &str {
+            "greet"
+        }
+        fn spec(&self) -> ToolSpec {
+            ToolSpec::new("greet", "greet", json!({"type": "object"}))
+        }
+        async fn invoke(
+            &self,
+            input: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<ToolOutput> {
+            self.seen.lock().unwrap().push(input);
+            Ok(ToolOutput::success(json!("ran")))
+        }
+    }
+
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .tool(RecordingTool {
+            seen: invoked.clone(),
+        })
+        .hook(|event: &mut HookEvent| {
+            if let HookEvent::BeforeTools(BeforeToolsEvent { cancel, .. }) = event {
+                *cancel = true;
+            }
+        })
+        .build()
+        .unwrap();
+
+    agent.prompt("greet the world").await.unwrap();
+
+    assert!(
+        invoked.lock().unwrap().is_empty(),
+        "cancelling the batch must stop every tool, not just the first"
+    );
+}
+
+#[tokio::test]
+async fn test_before_tools_sees_the_requested_calls() {
+    use std::sync::Mutex;
+    use strands_core::hooks::events::BeforeToolsEvent;
+    use strands_core::hooks::HookEvent;
+
+    let seen = Arc::new(Mutex::new(Vec::<(String, String)>::new()));
+    let seen_hook = seen.clone();
+
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .tool(GreetTool)
+        .hook(move |event: &mut HookEvent| {
+            if let HookEvent::BeforeTools(BeforeToolsEvent { tool_calls, .. }) = event {
+                *seen_hook.lock().unwrap() = tool_calls.clone();
+            }
+        })
+        .build()
+        .unwrap();
+
+    agent.prompt("greet").await.unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 1);
+    assert_eq!(seen[0], ("call_1".to_string(), "greet".to_string()));
+}
+
+#[tokio::test]
+async fn test_after_tools_can_end_the_turn() {
+    use strands_core::hooks::events::AfterToolsEvent;
+    use strands_core::hooks::HookEvent;
+
+    let call_count = Arc::new(AtomicUsize::new(0));
+
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: call_count.clone(),
+        })
+        .tool(GreetTool)
+        .hook(|event: &mut HookEvent| {
+            if let HookEvent::AfterTools(AfterToolsEvent { end_turn, .. }) = event {
+                *end_turn = true;
+            }
+        })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("greet").await.unwrap();
+
+    assert_eq!(result.stop_reason, StopReason::EndTurn);
+    assert_eq!(
+        call_count.load(Ordering::SeqCst),
+        1,
+        "ending the turn must skip the follow-up model call"
+    );
+}
+
+#[tokio::test]
+async fn test_after_tool_call_reports_a_duration() {
+    use std::sync::Mutex;
+    use strands_core::hooks::events::AfterToolCallEvent;
+    use strands_core::hooks::HookEvent;
+
+    let duration = Arc::new(Mutex::new(None::<std::time::Duration>));
+    let duration_hook = duration.clone();
+
+    struct SlowTool;
+
+    #[async_trait]
+    impl Tool for SlowTool {
+        fn name(&self) -> &str {
+            "greet"
+        }
+        fn spec(&self) -> ToolSpec {
+            ToolSpec::new("greet", "greet", json!({"type": "object"}))
+        }
+        async fn invoke(
+            &self,
+            _input: serde_json::Value,
+            _ctx: &ToolContext,
+        ) -> Result<ToolOutput> {
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            Ok(ToolOutput::success(json!("ok")))
+        }
+    }
+
+    let mut agent = Agent::builder()
+        .model(MockToolModel {
+            call_count: Arc::new(AtomicUsize::new(0)),
+        })
+        .tool(SlowTool)
+        .hook(move |event: &mut HookEvent| {
+            if let HookEvent::AfterToolCall(AfterToolCallEvent { duration, .. }) = event {
+                *duration_hook.lock().unwrap() = Some(*duration);
+            }
+        })
+        .build()
+        .unwrap();
+
+    agent.prompt("greet").await.unwrap();
+
+    let observed = duration.lock().unwrap().expect("duration reported");
+    assert!(
+        observed >= std::time::Duration::from_millis(15),
+        "expected the measured duration to reflect the tool's work, got {observed:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_hook_order_controls_dispatch_sequence() {
+    use std::sync::Mutex;
+    use strands_core::hooks::registry::order;
+    use strands_core::hooks::HookEvent;
+
+    let log: Arc<Mutex<Vec<&'static str>>> = Arc::new(Mutex::new(Vec::new()));
+    let (a, b) = (log.clone(), log.clone());
+
+    let mut agent = Agent::builder()
+        .model(MockTextModel {
+            response: "hi".to_string(),
+        })
+        .hook(move |event: &mut HookEvent| {
+            if matches!(event, HookEvent::BeforeModelCall { .. }) {
+                a.lock().unwrap().push("default");
+            }
+        })
+        .hook_with_order(
+            move |event: &mut HookEvent| {
+                if matches!(event, HookEvent::BeforeModelCall { .. }) {
+                    b.lock().unwrap().push("first");
+                }
+            },
+            order::SDK_FIRST,
+        )
+        .build()
+        .unwrap();
+
+    agent.prompt("hello").await.unwrap();
+
+    assert_eq!(
+        *log.lock().unwrap(),
+        vec!["first", "default"],
+        "a lower order must run first regardless of registration order"
     );
 }

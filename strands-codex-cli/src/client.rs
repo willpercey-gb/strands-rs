@@ -142,6 +142,11 @@ impl Default for CodexCliModel {
 
 #[async_trait]
 impl Model for CodexCliModel {
+    /// The configured model id, used to resolve a context window limit.
+    fn model_id(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
     async fn stream(
         &self,
         messages: &[Message],

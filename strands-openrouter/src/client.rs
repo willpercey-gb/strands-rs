@@ -58,6 +58,13 @@ impl OpenRouterModel {
 
 #[async_trait]
 impl Model for OpenRouterModel {
+    /// The configured model id, used to resolve a context window limit.
+    /// OpenRouter ids are `vendor/model`; the base id after the slash is what
+    /// the limits table knows.
+    fn model_id(&self) -> Option<&str> {
+        Some(&self.model)
+    }
+
     async fn stream(
         &self,
         messages: &[Message],

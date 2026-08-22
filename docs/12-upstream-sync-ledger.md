@@ -54,19 +54,19 @@ Items that touch subsystems strands-rs already has.
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | `Model::count_tokens` | v1.38 (×3), v1.39, v1.40 | Land the **final** shape only: trait method with a default estimator, provider override where native counting exists, `use_native_token_count` flag defaulting to **false** (v1.40 `fix: set use_native_token_count default to false`), and error caching for providers that reject it. Do not replay the four-step evolution. |
-| `[ ]` | Pre-call input token estimation | v1.38 `feat: estimate input tokens before model calls` | |
-| `[ ]` | Context window limit table | v1.39 `feat: add context window limit lookup table`, v1.43, v1.51 | Static map of model id → context window. v1.51 adds Claude 5 and GPT-5.6 families. |
-| `[ ]` | `context_window_limit` on model configs | v1.37-era `feat: add context_window_limit to model configs` | |
-| `[ ]` | `Model::estimate_utilization` | v1.51 `feat(model): add estimateUtilization method` | |
-| `[ ]` | Count JSON blocks when counting tokens | v1.40 `fix(core): include json blocks in counting tokens` | |
+| `[x]` | `Model::count_tokens` | v1.38 (×3), v1.39, v1.40 | Land the **final** shape only: trait method with a default estimator, provider override where native counting exists, `use_native_token_count` flag defaulting to **false** (v1.40 `fix: set use_native_token_count default to false`), and error caching for providers that reject it. Do not replay the four-step evolution. |
+| `[x]` | Pre-call input token estimation | v1.38 `feat: estimate input tokens before model calls` | |
+| `[x]` | Context window limit table | v1.39 `feat: add context window limit lookup table`, v1.43, v1.51 | Static map of model id → context window. v1.51 adds Claude 5 and GPT-5.6 families. |
+| `[x]` | `context_window_limit` on model configs | v1.37-era `feat: add context_window_limit to model configs` | |
+| `[x]` | `Model::estimate_utilization` | v1.51 `feat(model): add estimateUtilization method` | |
+| `[x]` | Count JSON blocks when counting tokens | v1.40 `fix(core): include json blocks in counting tokens` | |
 
 ### Conversation management
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | Proactive context compression | v1.40 `feat: add proactive context compression to conversation managers` | New `conversation/compression/` module. Compresses *before* overflow rather than reacting to it. |
-| `[ ]` | Message pinning | v1.43 `feat(context): add message pinning to conversation managers` | Pinned messages survive reduction. `conversation/compression/pin_message.rs`. |
+| `[x]` | Proactive context compression | v1.40 `feat: add proactive context compression to conversation managers` | New `conversation/compression/` module. Compresses *before* overflow rather than reacting to it. |
+| `[x]` | Message pinning | v1.43 `feat(context): add message pinning to conversation managers` | Pinned messages survive reduction. `conversation/compression/pin_message.rs`. |
 | `[x]` | `window_size = 0` handling | v1.44 `fix(conversation-manager): handle window_size=0 and reject negative values` | **Live bug in strands-rs**: `SlidingWindowConversationManager` with `window_size: 0` drains the entire history. |
 | `[x]` | Fallback trim point for tool-heavy conversations | v1.37-era `fix: add fallback trim point ... in SlidingWindowConversationManager` | Current Rust `drain(..n)` can split a `ToolUse` from its `ToolResult`, producing an invalid history. |
 | `[ ]` | `context_manager="auto"` facade | v1.43 `feat(context): add context_manager="auto" facade on Agent` | |
@@ -76,9 +76,9 @@ Items that touch subsystems strands-rs already has.
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | Batch `BeforeTools` / `AfterTools` events | v1.51 `feat(python): add BeforeToolsEvent and AfterToolsEvent batch hooks` | Fire once around the whole tool batch, not per tool. New `HookEvent` variants. |
-| `[ ]` | Hook ordering | v1.43 `feat(strands-py): add optional hook order` | `HookRegistry` currently dispatches in registration order with no way to influence it. |
-| `[ ]` | After-tool-call duration | v1.53 `feat: add after tool call duration` | `AfterToolCallEvent.duration`. |
+| `[x]` | Batch `BeforeTools` / `AfterTools` events | v1.51 `feat(python): add BeforeToolsEvent and AfterToolsEvent batch hooks` | Fire once around the whole tool batch, not per tool. New `HookEvent` variants. |
+| `[x]` | Hook ordering | v1.43 `feat(strands-py): add optional hook order` | `HookRegistry` currently dispatches in registration order with no way to influence it. |
+| `[x]` | After-tool-call duration | v1.53 `feat: add after tool call duration` | `AfterToolCallEvent.duration`. |
 | `[x]` | Count usage from hook-retried model calls | v1.45 `fix(python): count usage from hook-retried model calls` | **Already correct in strands-rs** — `event_loop.rs:197` accumulates `cycle_usage` before the retry `continue`. Verified, no change needed. |
 
 ### Tools
