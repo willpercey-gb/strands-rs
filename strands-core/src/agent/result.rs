@@ -1,5 +1,5 @@
 use crate::types::message::Message;
-use crate::types::streaming::{StopReason, Usage};
+use crate::types::streaming::{Metrics, StopReason, Usage};
 
 /// The result of a complete agent invocation.
 #[derive(Debug, Clone)]
@@ -10,6 +10,8 @@ pub struct AgentResult {
     pub message: Message,
     /// Token usage across all cycles.
     pub usage: Usage,
+    /// Performance metrics across all cycles.
+    pub metrics: Metrics,
     /// How many model call cycles were executed.
     pub cycle_count: usize,
 }

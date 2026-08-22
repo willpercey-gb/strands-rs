@@ -73,11 +73,7 @@ impl FnTool {
     {
         let f = Arc::new(f);
         Self {
-            tool_spec: ToolSpec {
-                name: name.to_string(),
-                description: description.to_string(),
-                input_schema,
-            },
+            tool_spec: ToolSpec::new(name, description, input_schema),
             invoke_fn: Arc::new(move |input, ctx| {
                 let f = Arc::clone(&f);
                 Box::pin(async move { f(input, ctx).await })

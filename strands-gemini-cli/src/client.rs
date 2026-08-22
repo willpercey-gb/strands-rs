@@ -1,3 +1,4 @@
+use strands_core::types::content::SystemPrompt;
 use std::process::Stdio;
 
 use async_stream::try_stream;
@@ -123,11 +124,11 @@ impl Model for GeminiCliModel {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         _tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError> {
         let system = system_prompt
-            .map(|s| s.to_string())
+            .and_then(|s| s.as_text())
             .or_else(|| self.system_prompt.clone());
         let prompt = render_prompt(messages, system.as_deref());
         let model = self.model.clone();

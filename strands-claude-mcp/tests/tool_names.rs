@@ -23,11 +23,7 @@ impl Tool for Echo {
         "echo"
     }
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "echo".into(),
-            description: "echo the input".into(),
-            input_schema: json!({"type": "object"}),
-        }
+        ToolSpec::new("echo", "echo the input", json!({"type": "object"}))
     }
     async fn invoke(&self, input: Value, _ctx: &ToolContext) -> Result<ToolOutput, StrandsError> {
         Ok(ToolOutput::success(input))

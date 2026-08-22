@@ -15,9 +15,7 @@
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
-};
+use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
 
 #[derive(Default)]
 pub(crate) struct GeminiCliState {
@@ -137,9 +135,8 @@ impl GeminiCliState {
         let mut out = Vec::new();
         self.close_text_block(&mut out);
         if let Some(stats) = value.get("stats") {
-            out.push(StreamEvent::Metadata {
-                usage: extract_usage(stats),
-            });
+            let (usage, metrics) = extract_usage(stats);
+            out.push(StreamEvent::Metadata { usage, metrics });
         }
         let status = value.get("status").and_then(|s| s.as_str()).unwrap_or("");
         let stop_reason = match status {
@@ -177,17 +174,23 @@ impl GeminiCliState {
     }
 }
 
-fn extract_usage(stats: &serde_json::Value) -> Usage {
+fn extract_usage(stats: &serde_json::Value) -> (Usage, Metrics) {
     let raw: StatsRaw = serde_json::from_value(stats.clone()).unwrap_or(StatsRaw {
         input_tokens: None,
         output_tokens: None,
         duration_ms: None,
     });
-    Usage {
-        input_tokens: raw.input_tokens,
-        output_tokens: raw.output_tokens,
-        total_duration_ns: raw.duration_ms.map(|ms| ms.saturating_mul(1_000_000)),
-    }
+    (
+        Usage {
+            input_tokens: raw.input_tokens,
+            output_tokens: raw.output_tokens,
+            ..Default::default()
+        },
+        Metrics {
+            latency_ms: raw.duration_ms,
+            ..Default::default()
+        },
+    )
 }
 
 #[cfg(test)]
@@ -230,7 +233,7 @@ mod tests {
         assert_eq!(assembled(&events), "Hello there");
         assert!(events.iter().any(|e| matches!(
             e,
-            StreamEvent::Metadata { usage: Usage { input_tokens: Some(7), output_tokens: Some(2), .. } }
+            StreamEvent::Metadata { usage: Usage { input_tokens: Some(7), output_tokens: Some(2), .. }, .. }
         )));
         assert!(events
             .iter()

@@ -2,9 +2,7 @@
 
 use std::collections::HashMap;
 
-use strands_core::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
-};
+use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
 
 use crate::types::{StreamChunk, StreamDelta};
 
@@ -69,8 +67,9 @@ impl OpenAiStreamState {
                 usage: Usage {
                     input_tokens: u.prompt_tokens,
                     output_tokens: u.completion_tokens,
-                    total_duration_ns: None,
+                    ..Default::default()
                 },
+                metrics: Metrics::default(),
             });
         }
 
@@ -115,6 +114,7 @@ impl OpenAiStreamState {
                         content_type: ContentBlockType::ToolUse {
                             tool_use_id: id,
                             name,
+                            reasoning_signature: None,
                         },
                     });
                     idx

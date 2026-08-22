@@ -1,3 +1,4 @@
+use crate::types::content::SystemPrompt;
 use async_trait::async_trait;
 
 use crate::error::StrandsError;
@@ -14,6 +15,6 @@ pub trait ConversationManager: Send + Sync {
     async fn reduce_context(
         &self,
         messages: &mut Vec<Message>,
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
     ) -> Result<(), StrandsError>;
 }

@@ -1,3 +1,4 @@
+use strands_core::types::content::SystemPrompt;
 use async_trait::async_trait;
 use futures::stream::{self, StreamExt};
 use reqwest::Client;
@@ -60,7 +61,7 @@ impl Model for OpenRouterModel {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError> {
         let body = build_request(self, messages, system_prompt, tool_specs);
@@ -101,15 +102,17 @@ impl Model for OpenRouterModel {
 fn build_request<'a>(
     m: &'a OpenRouterModel,
     messages: &[Message],
-    system_prompt: Option<&str>,
+    system_prompt: Option<&SystemPrompt>,
     tool_specs: &[ToolSpec],
 ) -> ChatCompletionRequest<'a> {
     let mut converted = Vec::new();
-    if let Some(sys) = system_prompt {
+    // OpenRouter takes a plain system string; a structured prompt is
+    // flattened to its text rendering.
+    if let Some(sys) = system_prompt.and_then(|p| p.as_text()) {
         if !sys.is_empty() {
             converted.push(OaiMessage {
                 role: "system".into(),
-                content: OaiContent::Text(sys.into()),
+                content: OaiContent::Text(sys),
                 tool_call_id: None,
                 tool_calls: Vec::new(),
             });

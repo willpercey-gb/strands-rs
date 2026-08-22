@@ -1,3 +1,4 @@
+use crate::types::content::SystemPrompt;
 use async_trait::async_trait;
 
 use crate::error::StrandsError;
@@ -14,7 +15,7 @@ impl ConversationManager for NullConversationManager {
     async fn reduce_context(
         &self,
         _messages: &mut Vec<Message>,
-        _system_prompt: Option<&str>,
+        _system_prompt: Option<&SystemPrompt>,
     ) -> Result<(), StrandsError> {
         Ok(())
     }

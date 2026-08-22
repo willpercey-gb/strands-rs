@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use tracing::debug;
 
+use crate::types::content::SystemPrompt;
 use crate::error::StrandsError;
 use crate::model::Model;
 use crate::types::content::ContentBlock;
@@ -80,11 +81,13 @@ impl SummarizingConversationManager {
         );
 
         let summary_messages = vec![Message::user(summary_prompt)];
-        let system_prompt = "You are a conversation summarizer. Output only the summary, nothing else.";
+        let system_prompt = SystemPrompt::from(
+            "You are a conversation summarizer. Output only the summary, nothing else.",
+        );
 
         let mut stream = self
             .model
-            .stream(&summary_messages, Some(system_prompt), &[])
+            .stream(&summary_messages, Some(&system_prompt), &[])
             .await?;
 
         let mut summary = String::new();
@@ -107,7 +110,7 @@ impl ConversationManager for SummarizingConversationManager {
     async fn reduce_context(
         &self,
         messages: &mut Vec<Message>,
-        _system_prompt: Option<&str>,
+        _system_prompt: Option<&SystemPrompt>,
     ) -> Result<(), StrandsError> {
         if messages.len() <= self.window_size {
             return Ok(());
@@ -136,12 +139,12 @@ impl ConversationManager for SummarizingConversationManager {
         let mut new_messages = Vec::new();
 
         if !summary_text.is_empty() {
-            new_messages.push(Message {
-                role: Role::User,
-                content: vec![ContentBlock::Text {
+            new_messages.push(Message::new(
+                Role::User,
+                vec![ContentBlock::Text {
                     text: format!("[Previous conversation summary]\n{summary_text}"),
                 }],
-            });
+            ));
         }
 
         // Keep any older messages that weren't summarized

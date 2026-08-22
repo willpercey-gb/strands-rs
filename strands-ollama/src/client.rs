@@ -1,12 +1,11 @@
+use strands_core::types::content::SystemPrompt;
 use async_trait::async_trait;
 use futures::stream;
 use futures::TryStreamExt;
 use reqwest::Client;
 use strands_core::model::{Model, ModelStream};
 use strands_core::types::message::{Message, Role};
-use strands_core::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
-};
+use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
 use strands_core::types::tools::ToolSpec;
 use strands_core::{ContentBlock, StrandsError};
 use tracing::debug;
@@ -51,15 +50,16 @@ impl OllamaModel {
     fn convert_messages(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
     ) -> Vec<OllamaMessage> {
         let mut ollama_msgs = Vec::new();
 
-        // Add system prompt as first message
-        if let Some(prompt) = system_prompt {
+        // Add system prompt as first message. Ollama has no cache-point
+        // concept, so a structured prompt is flattened to its text rendering.
+        if let Some(text) = system_prompt.and_then(|p| p.as_text()) {
             ollama_msgs.push(OllamaMessage {
                 role: "system".to_string(),
-                content: prompt.to_string(),
+                content: text,
                 tool_calls: None,
             });
         }
@@ -102,6 +102,19 @@ impl OllamaModel {
                                         strands_core::types::content::ToolResultContent::Json {
                                             value,
                                         } => serde_json::to_string(value).unwrap_or_default(),
+                                        // Ollama's chat API takes tool results as
+                                        // plain text, so binary parts become a
+                                        // descriptive placeholder rather than
+                                        // being silently dropped.
+                                        strands_core::types::content::ToolResultContent::Image(
+                                            img,
+                                        ) => format!("[image: {:?}]", img.format),
+                                        strands_core::types::content::ToolResultContent::Document(
+                                            doc,
+                                        ) => format!(
+                                            "[document: {}]",
+                                            doc.name.clone().unwrap_or_else(|| format!("{:?}", doc.format))
+                                        ),
                                     })
                                     .collect::<Vec<_>>()
                                     .join("\n");
@@ -186,7 +199,7 @@ impl Model for OllamaModel {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError> {
         let ollama_messages = self.convert_messages(messages, system_prompt);
@@ -318,6 +331,7 @@ impl Model for OllamaModel {
                         content_type: ContentBlockType::ToolUse {
                             tool_use_id,
                             name: tc.function.name.clone(),
+                            reasoning_signature: None,
                         },
                     }));
                     let input_json =
@@ -347,7 +361,12 @@ impl Model for OllamaModel {
                 usage: Usage {
                     input_tokens: chunk.prompt_eval_count,
                     output_tokens: chunk.eval_count,
-                    total_duration_ns: chunk.total_duration,
+                    ..Default::default()
+                },
+                metrics: Metrics {
+                    // Ollama reports total_duration in nanoseconds.
+                    latency_ms: chunk.total_duration.map(|ns| ns / 1_000_000),
+                    ..Default::default()
                 },
             }));
         }

@@ -1,3 +1,4 @@
+use strands_core::types::content::SystemPrompt;
 use std::process::Stdio;
 
 use async_stream::try_stream;
@@ -85,7 +86,7 @@ impl Model for ClaudeCliModel {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         _tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError> {
         // Concatenate the conversation into a single prompt — the CLI
@@ -97,7 +98,7 @@ impl Model for ClaudeCliModel {
         let bare = self.bare;
         let dangerously_skip_permissions = self.dangerously_skip_permissions;
         let system = system_prompt
-            .map(|s| s.to_string())
+            .and_then(|s| s.as_text())
             .or_else(|| self.system_prompt.clone());
 
         let stream = try_stream! {

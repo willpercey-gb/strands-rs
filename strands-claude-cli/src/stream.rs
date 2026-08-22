@@ -17,9 +17,7 @@
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
-};
+use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
 
 #[derive(Default)]
 pub(crate) struct ClaudeCliState {
@@ -65,6 +63,7 @@ impl ClaudeCliState {
                 if let Some(usage) = usage_obj {
                     events.push(StreamEvent::Metadata {
                         usage: extract_usage(usage),
+                        metrics: Metrics::default(),
                     });
                 }
                 events
@@ -261,7 +260,7 @@ fn extract_usage(usage: &serde_json::Value) -> Usage {
     Usage {
         input_tokens: raw.input_tokens,
         output_tokens: raw.output_tokens,
-        total_duration_ns: None,
+        ..Default::default()
     }
 }
 
@@ -416,7 +415,8 @@ mod tests {
         assert!(events.iter().any(|e| matches!(
             e,
             StreamEvent::Metadata {
-                usage: Usage { input_tokens: Some(42), output_tokens: Some(13), .. }
+                usage: Usage { input_tokens: Some(42), output_tokens: Some(13), .. },
+                ..
             }
         )));
     }

@@ -1,3 +1,4 @@
+use crate::types::content::SystemPrompt;
 mod builder;
 pub mod callback;
 mod event_loop;
@@ -26,7 +27,7 @@ use crate::types::tools::ToolSpec;
 pub struct Agent {
     pub(crate) model: Box<dyn Model>,
     pub(crate) tools: HashMap<String, Box<dyn Tool>>,
-    pub(crate) system_prompt: Option<String>,
+    pub(crate) system_prompt: Option<SystemPrompt>,
     pub(crate) messages: Vec<Message>,
     pub(crate) conversation_manager: Box<dyn ConversationManager>,
     pub(crate) session_manager: Option<Box<dyn SessionManager>>,
@@ -58,14 +59,16 @@ impl Agent {
         self.cancel.store(false, Ordering::Relaxed);
         self.invocation_state = serde_json::Value::Object(serde_json::Map::new());
 
-        // Add the user message
-        self.messages.push(Message::user(input));
+        // Add the user message, stamped with a durable id.
+        let mut user_msg = Message::user(input);
+        user_msg.ensure_tracking_id();
+        self.messages.push(user_msg);
 
         let result = event_loop::run_loop(
             self.model.as_ref(),
             &self.tools,
             &mut self.messages,
-            self.system_prompt.as_deref(),
+            self.system_prompt.as_ref(),
             self.conversation_manager.as_ref(),
             &self.hooks,
             self.callback_handler.as_deref(),
@@ -155,10 +158,10 @@ impl Tool for AgentTool {
     }
 
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: self.name.clone(),
-            description: self.description.clone(),
-            input_schema: serde_json::json!({
+        ToolSpec::new(
+            self.name.clone(),
+            self.description.clone(),
+            serde_json::json!({
                 "type": "object",
                 "properties": {
                     "prompt": {
@@ -168,7 +171,7 @@ impl Tool for AgentTool {
                 },
                 "required": ["prompt"]
             }),
-        }
+        )
     }
 
     async fn invoke(
@@ -210,7 +213,7 @@ mod tests {
         async fn stream(
             &self,
             _messages: &[Message],
-            _system_prompt: Option<&str>,
+            _system_prompt: Option<&SystemPrompt>,
             _tool_specs: &[ToolSpec],
         ) -> Result<crate::model::ModelStream, StrandsError> {
             let s = stream::iter(vec![Ok::<StreamEvent, StrandsError>(StreamEvent::MessageStop {

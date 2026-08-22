@@ -5,6 +5,7 @@ use std::sync::Arc;
 use crate::conversation::sliding_window::SlidingWindowConversationManager;
 use crate::conversation::ConversationManager;
 use crate::error::StrandsError;
+use crate::types::content::SystemPrompt;
 use crate::hooks::{Hook, HookRegistry};
 use crate::model::Model;
 use crate::plugin::Plugin;
@@ -19,7 +20,7 @@ use super::Agent;
 pub struct AgentBuilder {
     model: Option<Box<dyn Model>>,
     tools: HashMap<String, Box<dyn Tool>>,
-    system_prompt: Option<String>,
+    system_prompt: Option<SystemPrompt>,
     conversation_manager: Option<Box<dyn ConversationManager>>,
     session_manager: Option<Box<dyn SessionManager>>,
     hooks: HookRegistry,
@@ -72,7 +73,10 @@ impl AgentBuilder {
     }
 
     /// Set the system prompt.
-    pub fn system_prompt(mut self, prompt: impl Into<String>) -> Self {
+    ///
+    /// Accepts a plain string, or a `Vec<SystemContentBlock>` when cache
+    /// points need to sit inside the prompt.
+    pub fn system_prompt(mut self, prompt: impl Into<SystemPrompt>) -> Self {
         self.system_prompt = Some(prompt.into());
         self
     }

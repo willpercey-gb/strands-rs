@@ -17,9 +17,7 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
-};
+use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
 
 #[derive(Default)]
 pub(crate) struct CodexCliState {
@@ -74,6 +72,7 @@ impl CodexCliState {
                 if let Some(usage) = value.get("usage") {
                     out.push(StreamEvent::Metadata {
                         usage: extract_usage(usage),
+                        metrics: Metrics::default(),
                     });
                 }
                 out.push(StreamEvent::MessageStop {
@@ -260,7 +259,7 @@ fn extract_usage(usage: &serde_json::Value) -> Usage {
     Usage {
         input_tokens: raw.input_tokens.map(|n| n.max(0) as u64),
         output_tokens: raw.output_tokens.map(|n| n.max(0) as u64),
-        total_duration_ns: None,
+        ..Default::default()
     }
 }
 
@@ -309,7 +308,7 @@ mod tests {
             .any(|e| matches!(e, StreamEvent::MessageStop { stop_reason: StopReason::EndTurn })));
         assert!(events.iter().any(|e| matches!(
             e,
-            StreamEvent::Metadata { usage: Usage { input_tokens: Some(10), output_tokens: Some(3), .. } }
+            StreamEvent::Metadata { usage: Usage { input_tokens: Some(10), output_tokens: Some(3), .. }, .. }
         )));
     }
 

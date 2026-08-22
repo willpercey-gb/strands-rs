@@ -2,7 +2,9 @@ use async_trait::async_trait;
 use futures::stream::BoxStream;
 
 use crate::error::StrandsError;
-use crate::types::{message::Message, streaming::StreamEvent, tools::ToolSpec};
+use crate::types::{
+    content::SystemPrompt, message::Message, streaming::StreamEvent, tools::ToolSpec,
+};
 
 /// A boxed async stream of model events.
 pub type ModelStream = BoxStream<'static, Result<StreamEvent, StrandsError>>;
@@ -19,10 +21,14 @@ pub trait Model: Send + Sync {
     /// 1. Convert `messages` and `tool_specs` to the provider's format
     /// 2. Make the API call with streaming enabled
     /// 3. Return a stream of `StreamEvent` variants
+    /// `system_prompt` may be plain text or structured blocks carrying cache
+    /// points. Adapters without cache-point support should call
+    /// [`SystemPrompt::as_text`]; those with it should use
+    /// [`SystemPrompt::split`].
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError>;
 }

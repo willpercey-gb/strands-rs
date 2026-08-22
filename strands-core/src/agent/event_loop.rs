@@ -13,10 +13,10 @@ use crate::hooks::events::*;
 use crate::hooks::registry::HookRegistry;
 use crate::model::Model;
 use crate::tool::{Tool, ToolContext, ToolOutput};
-use crate::types::content::{ContentBlock, ToolResultContent, ToolResultStatus};
+use crate::types::content::{ContentBlock, ReasoningContent, SystemPrompt, ToolResultContent, ToolResultStatus};
 use crate::types::message::{Message, Role};
 use crate::types::streaming::{
-    ContentBlockType, DeltaContent, StopReason, StreamEvent, Usage,
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
 };
 
 use super::result::AgentResult;
@@ -26,12 +26,68 @@ struct StreamAccumulator {
     blocks: Vec<ContentBlock>,
     active_text: Option<String>,
     active_tool: Option<PartialToolUse>,
+    active_reasoning: Option<ReasoningContent>,
 }
 
 struct PartialToolUse {
     tool_use_id: String,
     name: String,
     input_json: String,
+    /// Signature tying the model's reasoning to this call. Providers that
+    /// issue one reject the tool call unless it is echoed back, so it must be
+    /// preserved even when no reasoning text accompanied it.
+    reasoning_signature: Option<String>,
+}
+
+impl PartialToolUse {
+    /// Parse the accumulated input fragments into a JSON value.
+    ///
+    /// Providers occasionally emit truncated or malformed tool input — most
+    /// often when a response is cut short mid-stream. Defaulting to an empty
+    /// object keeps the loop alive, but doing so silently loses the model's
+    /// intent, so log the raw fragment (truncated) to make it diagnosable.
+    fn parse_input(&self) -> Value {
+        match serde_json::from_str(&self.input_json) {
+            Ok(value) => value,
+            Err(e) => {
+                const MAX_LOGGED: usize = 200;
+                let raw: String = self.input_json.chars().take(MAX_LOGGED).collect();
+                warn!(
+                    tool_name = %self.name,
+                    tool_use_id = %self.tool_use_id,
+                    raw_input = %raw,
+                    error = %e,
+                    "Failed to parse tool input JSON, defaulting to empty object"
+                );
+                Value::Object(serde_json::Map::new())
+            }
+        }
+    }
+
+    /// Flush this partial tool use into content blocks.
+    ///
+    /// When the provider supplied a reasoning signature, it is emitted as its
+    /// own `Reasoning` block ahead of the tool use — a reasoning block with
+    /// empty text but a non-empty signature is valid and must not be dropped.
+    fn into_content_blocks(self) -> Vec<ContentBlock> {
+        let input = self.parse_input();
+        let mut blocks = Vec::new();
+
+        if let Some(signature) = self.reasoning_signature {
+            blocks.push(ContentBlock::Reasoning(ReasoningContent {
+                text: None,
+                signature: Some(signature),
+                redacted_content: None,
+            }));
+        }
+
+        blocks.push(ContentBlock::ToolUse {
+            tool_use_id: self.tool_use_id,
+            name: self.name,
+            input,
+        });
+        blocks
+    }
 }
 
 impl StreamAccumulator {
@@ -40,6 +96,7 @@ impl StreamAccumulator {
             blocks: Vec::new(),
             active_text: None,
             active_tool: None,
+            active_reasoning: None,
         }
     }
 
@@ -49,12 +106,20 @@ impl StreamAccumulator {
                 ContentBlockType::Text => {
                     self.active_text = Some(String::new());
                 }
-                ContentBlockType::ToolUse { tool_use_id, name } => {
+                ContentBlockType::ToolUse {
+                    tool_use_id,
+                    name,
+                    reasoning_signature,
+                } => {
                     self.active_tool = Some(PartialToolUse {
                         tool_use_id: tool_use_id.clone(),
                         name: name.clone(),
                         input_json: String::new(),
+                        reasoning_signature: reasoning_signature.clone(),
                     });
+                }
+                ContentBlockType::Reasoning => {
+                    self.active_reasoning = Some(ReasoningContent::default());
                 }
             },
             StreamEvent::ContentBlockDelta { delta, .. } => match delta {
@@ -68,44 +133,49 @@ impl StreamAccumulator {
                         tool.input_json.push_str(fragment);
                     }
                 }
+                DeltaContent::ReasoningDelta(text) => {
+                    let reasoning = self.active_reasoning.get_or_insert_with(Default::default);
+                    reasoning.text.get_or_insert_with(String::new).push_str(text);
+                }
+                DeltaContent::ReasoningSignature(signature) => {
+                    // Some providers deliver the signature as its own delta
+                    // rather than on the block start.
+                    let reasoning = self.active_reasoning.get_or_insert_with(Default::default);
+                    reasoning.signature = Some(signature.clone());
+                }
             },
             StreamEvent::ContentBlockStop { .. } => {
-                if let Some(text) = self.active_text.take() {
-                    if !text.is_empty() {
-                        self.blocks.push(ContentBlock::Text { text });
-                    }
-                }
-                if let Some(tool) = self.active_tool.take() {
-                    let input = serde_json::from_str(&tool.input_json)
-                        .unwrap_or(Value::Object(serde_json::Map::new()));
-                    self.blocks.push(ContentBlock::ToolUse {
-                        tool_use_id: tool.tool_use_id,
-                        name: tool.name,
-                        input,
-                    });
-                }
+                self.flush_active();
             }
             _ => {}
         }
     }
 
-    fn finalize(self) -> Vec<ContentBlock> {
-        let mut blocks = self.blocks;
-        if let Some(text) = self.active_text {
+    /// Close out whatever block is currently open.
+    fn flush_active(&mut self) {
+        if let Some(text) = self.active_text.take() {
             if !text.is_empty() {
-                blocks.push(ContentBlock::Text { text });
+                self.blocks.push(ContentBlock::Text { text });
             }
         }
-        if let Some(tool) = self.active_tool {
-            let input = serde_json::from_str(&tool.input_json)
-                .unwrap_or(Value::Object(serde_json::Map::new()));
-            blocks.push(ContentBlock::ToolUse {
-                tool_use_id: tool.tool_use_id,
-                name: tool.name,
-                input,
-            });
+        if let Some(reasoning) = self.active_reasoning.take() {
+            // Keep a reasoning block whose text is empty but whose signature
+            // is set: dropping it invalidates the tool call it belongs to.
+            let has_content = reasoning.text.as_deref().is_some_and(|t| !t.is_empty())
+                || reasoning.signature.is_some()
+                || reasoning.redacted_content.is_some();
+            if has_content {
+                self.blocks.push(ContentBlock::Reasoning(reasoning));
+            }
         }
-        blocks
+        if let Some(tool) = self.active_tool.take() {
+            self.blocks.extend(tool.into_content_blocks());
+        }
+    }
+
+    fn finalize(mut self) -> Vec<ContentBlock> {
+        self.flush_active();
+        self.blocks
     }
 }
 
@@ -120,6 +190,11 @@ pub struct RetryConfig {
     pub backoff_multiplier: f64,
     /// Maximum backoff delay in milliseconds.
     pub max_backoff_ms: u64,
+    /// Maximum number of consecutive hook-requested model retries.
+    ///
+    /// Hook retries do not advance the cycle counter, so without a separate
+    /// bound a hook that always sets `retry` would loop forever.
+    pub max_hook_retries: usize,
 }
 
 impl Default for RetryConfig {
@@ -129,6 +204,7 @@ impl Default for RetryConfig {
             initial_backoff_ms: 500,
             backoff_multiplier: 2.0,
             max_backoff_ms: 30_000,
+            max_hook_retries: 3,
         }
     }
 }
@@ -141,7 +217,7 @@ pub(crate) async fn run_loop(
     model: &dyn Model,
     tools: &HashMap<String, Box<dyn Tool>>,
     messages: &mut Vec<Message>,
-    system_prompt: Option<&str>,
+    system_prompt: Option<&SystemPrompt>,
     conversation_manager: &dyn ConversationManager,
     hooks: &HookRegistry,
     callback_handler: Option<&dyn CallbackHandler>,
@@ -157,11 +233,13 @@ pub(crate) async fn run_loop(
     };
 
     let mut total_usage = Usage::default();
+    let mut total_metrics = Metrics::default();
     #[allow(unused_assignments)]
     let mut stop_reason = StopReason::EndTurn;
     #[allow(unused_assignments)]
     let mut last_assistant_message = None::<Message>;
     let mut cycle = 0;
+    let mut hook_retries = 0usize;
 
     // BeforeInvocation — hooks can override messages
     let mut before_event = HookEvent::BeforeInvocation(BeforeInvocationEvent {
@@ -188,23 +266,26 @@ pub(crate) async fn run_loop(
         conversation_manager.reduce_context(messages, system_prompt).await?;
 
         // Model call with retry loop
-        let (content_blocks, model_stop_reason, cycle_usage) = call_model_with_retry(
+        let (content_blocks, model_stop_reason, cycle_usage, cycle_metrics) = call_model_with_retry(
             model, messages, system_prompt, &tool_specs, hooks, callback_handler, cancel, cycle,
             retry_config,
         )
         .await?;
 
-        // Accumulate usage
-        total_usage.input_tokens = Some(
-            total_usage.input_tokens.unwrap_or(0) + cycle_usage.input_tokens.unwrap_or(0),
-        );
-        total_usage.output_tokens = Some(
-            total_usage.output_tokens.unwrap_or(0) + cycle_usage.output_tokens.unwrap_or(0),
-        );
+        // Accumulate usage and metrics across cycles.
+        total_usage.accumulate(&cycle_usage);
+        total_metrics.accumulate(&cycle_metrics);
         stop_reason = model_stop_reason;
 
-        // Build and append assistant message
-        let assistant_msg = Message::assistant(content_blocks);
+        // Build and append assistant message, stamped with a durable id and
+        // the usage/metrics of the call that produced it.
+        let mut assistant_msg = Message::assistant(content_blocks);
+        assistant_msg.ensure_tracking_id();
+        assistant_msg.metadata = Some(crate::types::message::MessageMetadata {
+            usage: Some(cycle_usage.clone()),
+            metrics: Some(cycle_metrics.clone()),
+            ..Default::default()
+        });
         messages.push(assistant_msg.clone());
         last_assistant_message = Some(assistant_msg.clone());
 
@@ -217,12 +298,26 @@ pub(crate) async fn run_loop(
         hooks.dispatch(&mut after_model);
         if let HookEvent::AfterModelCall(ref evt) = after_model {
             if evt.retry {
-                // Remove the assistant message we just added and retry
-                messages.pop();
-                debug!(cycle, "Hook requested model retry");
-                continue;
+                // A hook-requested retry does not advance `cycle`, so it is
+                // not bounded by `max_cycles`. Count them separately or a
+                // hook that unconditionally sets `retry` spins forever.
+                hook_retries += 1;
+                if hook_retries > retry_config.max_hook_retries {
+                    warn!(
+                        cycle,
+                        hook_retries,
+                        max = retry_config.max_hook_retries,
+                        "Hook retry limit exceeded; proceeding with the last response"
+                    );
+                } else {
+                    // Remove the assistant message we just added and retry
+                    messages.pop();
+                    debug!(cycle, hook_retries, "Hook requested model retry");
+                    continue;
+                }
             }
         }
+        hook_retries = 0;
 
         hooks.dispatch(&mut HookEvent::MessageAdded {
             message: assistant_msg.clone(),
@@ -231,33 +326,27 @@ pub(crate) async fn run_loop(
         cycle += 1;
 
         // Check if we should stop or execute tools
-        match stop_reason {
-            StopReason::EndTurn
-            | StopReason::MaxTokens
-            | StopReason::Cancelled
-            | StopReason::ContentFiltered
-            | StopReason::GuardrailIntervention => {
-                break;
-            }
-            StopReason::ToolUse => {
-                let tool_uses = assistant_msg.tool_uses();
-                let tool_results = if concurrent_tools {
-                    execute_tools_concurrent(tools, &tool_uses, &tool_ctx, hooks).await
-                } else {
-                    execute_tools_sequential(tools, &tool_uses, &tool_ctx, hooks).await
-                };
-
-                let tool_result_msg = Message {
-                    role: Role::User,
-                    content: tool_results,
-                };
-                messages.push(tool_result_msg.clone());
-
-                hooks.dispatch(&mut HookEvent::MessageAdded {
-                    message: tool_result_msg,
-                });
-            }
+        // Every reason other than ToolUse ends the loop. Branching on
+        // `is_terminal` rather than enumerating variants means a newly added
+        // StopReason stops the agent rather than silently looping forever.
+        if stop_reason.is_terminal() {
+            break;
         }
+
+        let tool_uses = assistant_msg.tool_uses();
+        let tool_results = if concurrent_tools {
+            execute_tools_concurrent(tools, &tool_uses, &tool_ctx, hooks).await
+        } else {
+            execute_tools_sequential(tools, &tool_uses, &tool_ctx, hooks).await
+        };
+
+        let mut tool_result_msg = Message::new(Role::User, tool_results);
+        tool_result_msg.ensure_tracking_id();
+        messages.push(tool_result_msg.clone());
+
+        hooks.dispatch(&mut HookEvent::MessageAdded {
+            message: tool_result_msg,
+        });
     }
 
     // AfterInvocation — hooks can request resume
@@ -275,6 +364,7 @@ pub(crate) async fn run_loop(
         stop_reason,
         message: last_assistant_message.unwrap_or_else(|| Message::assistant(vec![])),
         usage: total_usage,
+        metrics: total_metrics,
         cycle_count: cycle,
     })
 }
@@ -284,14 +374,14 @@ pub(crate) async fn run_loop(
 async fn call_model_with_retry(
     model: &dyn Model,
     messages: &[Message],
-    system_prompt: Option<&str>,
+    system_prompt: Option<&SystemPrompt>,
     tool_specs: &[crate::types::tools::ToolSpec],
     hooks: &HookRegistry,
     callback_handler: Option<&dyn CallbackHandler>,
     cancel: &Arc<AtomicBool>,
     cycle: usize,
     retry_config: &RetryConfig,
-) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage)> {
+) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage, Metrics)> {
     let mut attempt = 0;
     let mut backoff_ms = retry_config.initial_backoff_ms;
 
@@ -334,15 +424,18 @@ async fn call_model_with_retry(
 async fn try_model_call(
     model: &dyn Model,
     messages: &[Message],
-    system_prompt: Option<&str>,
+    system_prompt: Option<&SystemPrompt>,
     tool_specs: &[crate::types::tools::ToolSpec],
     callback_handler: Option<&dyn CallbackHandler>,
     cancel: &Arc<AtomicBool>,
-) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage)> {
-    let mut stream = model.stream(messages, system_prompt, tool_specs).await?;
+) -> crate::Result<(Vec<ContentBlock>, StopReason, Usage, Metrics)> {
+    // Tracking ids and metadata are SDK bookkeeping — never send them upstream.
+    let outbound = crate::types::message::messages_for_model(messages);
+    let mut stream = model.stream(&outbound, system_prompt, tool_specs).await?;
     let mut accumulator = StreamAccumulator::new();
     let mut stop_reason = StopReason::EndTurn;
     let mut usage = Usage::default();
+    let mut metrics = Metrics::default();
 
     while let Some(event_result) = stream.next().await {
         if cancel.load(Ordering::Relaxed) {
@@ -360,8 +453,12 @@ async fn try_model_call(
             StreamEvent::MessageStop { stop_reason: sr } => {
                 stop_reason = *sr;
             }
-            StreamEvent::Metadata { usage: u } => {
+            StreamEvent::Metadata {
+                usage: u,
+                metrics: m,
+            } => {
                 usage = u.clone();
+                metrics = m.clone();
             }
             _ => {}
         }
@@ -369,7 +466,7 @@ async fn try_model_call(
         accumulator.handle_event(&event);
     }
 
-    Ok((accumulator.finalize(), stop_reason, usage))
+    Ok((accumulator.finalize(), stop_reason, usage, metrics))
 }
 
 /// Execute a single tool, handling not-found gracefully.
@@ -480,7 +577,7 @@ async fn execute_tools_concurrent(
             } else {
                 execute_tool(tools, tool_name, input, tool_ctx).await
             };
-            (*tool_use_id, tool_name.to_string(), output)
+            (*tool_use_id, tool_name.to_string(), *input, output)
         })
         .collect();
 
@@ -488,7 +585,7 @@ async fn execute_tools_concurrent(
 
     // Fire AfterToolCall hooks and build results
     let mut results = Vec::new();
-    for (tool_use_id, tool_name, output) in outputs {
+    for (tool_use_id, tool_name, input, output) in outputs {
         let mut after_tool = HookEvent::AfterToolCall(AfterToolCallEvent {
             tool_name: tool_name.clone(),
             is_error: output.is_error,
@@ -498,7 +595,11 @@ async fn execute_tools_concurrent(
 
         let final_output =
             if let HookEvent::AfterToolCall(AfterToolCallEvent { retry: true, .. }) = after_tool {
-                execute_tool(tools, &tool_name, &Value::Null, tool_ctx).await
+                debug!(tool_name, "Hook requested tool retry");
+                // Retry with the *original* input — re-invoking with a
+                // different payload would run a different call than the
+                // one the hook asked to retry.
+                execute_tool(tools, &tool_name, input, tool_ctx).await
             } else {
                 output
             };

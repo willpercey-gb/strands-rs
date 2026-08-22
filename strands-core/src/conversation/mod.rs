@@ -2,6 +2,7 @@ pub mod manager;
 pub mod null;
 pub mod sliding_window;
 pub mod summarizing;
+pub mod trim;
 
 pub use manager::ConversationManager;
 pub use null::NullConversationManager;
