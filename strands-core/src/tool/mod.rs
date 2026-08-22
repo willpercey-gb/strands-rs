@@ -1,4 +1,5 @@
 pub mod executor;
+pub mod structured_output;
 
 use async_trait::async_trait;
 use serde_json::Value;
@@ -41,6 +42,10 @@ impl ToolOutput {
 
 pub use executor::{
     ConcurrentToolExecutor, SequentialToolExecutor, ToolCall, ToolExecutor,
+};
+pub use structured_output::{
+    StructuredOutputSlot, StructuredOutputSpec, StructuredOutputTool,
+    DEFAULT_STRUCTURED_OUTPUT_PROMPT,
 };
 
 /// Implement this trait to define a tool the agent can invoke.

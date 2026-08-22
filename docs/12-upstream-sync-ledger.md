@@ -86,9 +86,9 @@ Items that touch subsystems strands-rs already has.
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
 | `[ ]` | Agent-as-tool delegation | v1.53 `feat(py): add agent-as-tool delegation` | `agent/_agent_delegation.py`. Richer than the current `AgentTool` wrapper — supports handing the sub-agent the live conversation rather than a fresh prompt. |
-| `[ ]` | Structured output | pre-existing upstream, never ported | `tools/structured_output/`. Schema-constrained responses via a synthetic tool. Sizeable. |
+| `[x]` | Structured output | pre-existing upstream, never ported | `tools/structured_output/`. Schema-constrained responses via a synthetic tool. Sizeable. |
 | `[x]` | Pluggable tool executors | pre-existing upstream, never ported | strands-rs has a `concurrent_tools: bool`; upstream has a `ToolExecutor` trait with concurrent/sequential impls. Needed before middleware's `ExecuteToolStage`. |
-| `[ ]` | Bound tool schema normalization recursion | v1.49 `fix(core): bound tool schema normalization recursion depth` | |
+| `[x]` | Bound tool schema normalization recursion | v1.49 `fix(core): bound tool schema normalization recursion depth` | |
 | `[x]` | Concurrent tool results in request order | v1.44 `fix(core): keep concurrent tool results in request order` | Rust `join_all` already preserves order — verify and note. |
 | `[x]` | Do not synthesize exception for cancelled tools | v1.50 `fix(core): do not synthesize exception for cancelled tools` | |
 | `[x]` | Retry re-invokes with original input | — | **Live bug in strands-rs**: `execute_tools_concurrent` retries with `Value::Null` instead of the original input (`event_loop.rs:962`). Sequential path is correct. |
@@ -98,9 +98,9 @@ Items that touch subsystems strands-rs already has.
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
 | `[ ]` | `MultiAgentPlugin` for Swarm/Graph | v1.41 `feat(plugins): add MultiAgentPlugin` | Plus `plugins/multiagent_registry.py`. |
-| `[ ]` | `invocation_state` into edge conditions | v1.44 (re-landed after v1.42 revert) | Note the revert — take the v1.44 form. |
-| `[ ]` | `Display` for `MultiAgentResult` / `NodeResult` | v1.51 `feat(multiagent): add __str__ support` | |
-| `[ ]` | Accumulate cache token counters in Graph/Swarm | v1.51 `fix(multiagent)` | |
+| `[x]` | `invocation_state` into edge conditions | v1.44 (re-landed after v1.42 revert) | Note the revert — take the v1.44 form. |
+| `[x]` | `Display` for `MultiAgentResult` / `NodeResult` | v1.51 `feat(multiagent): add __str__ support` | |
+| `[x]` | Accumulate cache token counters in Graph/Swarm | v1.51 `fix(multiagent)` | |
 | `[ ]` | Preserve failed status from graph nodes | v1.46 `fix(multiagent)` | |
 | `[ ]` | Preserve shared context across serialize/deserialize | v1.52 `fix(multiagent)` | |
 | `[ ]` | Graph resume: AND-join edge/fan-in fixes | v1.48, v1.50 `fix(graph)` ×2 | Only relevant once interrupts/checkpointing land. |
@@ -111,7 +111,7 @@ Items that touch subsystems strands-rs already has.
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | Snapshot session manager | v1.51 `feat: add snapshot session manager to python` | Plus `types/_snapshot.py` and v1.43 `feat: add model_state as a snapshot field`. |
+| `[x]` | Snapshot session manager | v1.51 `feat: add snapshot session manager to python` | Plus `types/_snapshot.py` and v1.43 `feat: add model_state as a snapshot field`. |
 | `[ ]` | S3 session manager | pre-existing, never ported | Plus v1.42 `feat: add endpoint_url parameter to S3SessionManager`. |
 | `[x]` | Symlink attack prevention | v1.47 `fix(session): prevent symlink attacks in FileSessionManager` | **Applies directly** — Rust `FileSessionManager` joins an unsanitised `session_id` into a path. |
 | `[ ]` | Repair mid-iteration skip of orphaned toolUse | v1.50 `fix(session)` | |
@@ -136,7 +136,7 @@ reshape the event loop, so they land before Phase 3 depends on them.
 | `[ ]` | **Interrupts** | pre-existing + v1.50, v1.51 | `interrupt.py`, `types/interrupt.py`. Pause/resume mid-tool with a caller round-trip. Prerequisite for checkpointing and for the graph/swarm resume fixes. v1.50 adds middleware-initiated interrupts; v1.51 adds per-call MCP tool cancellation and A2A round-trip. |
 | `[ ]` | **Checkpointing** | v1.43 `feat(checkpoint): wire checkpointing into agent event loop` | `experimental/checkpoint/`. Depends on interrupts + snapshot sessions. |
 | `[ ]` | **Model routing + fallback** | v1.51, v1.52 | `models/routing/{router,strategy,fallback_strategy}`. `ModelRouter` accepted via `Agent(model=)`; per-call model threaded through `InvokeModelStage`. Depends on middleware. |
-| `[ ]` | Structured output context | pre-existing | `tools/structured_output/_structured_output_context.py`. Pairs with the Phase 1 structured output item. |
+| `[x]` | Structured output context | pre-existing | `tools/structured_output/_structured_output_context.py`. Pairs with the Phase 1 structured output item. |
 
 ## Phase 3 — New subsystems
 

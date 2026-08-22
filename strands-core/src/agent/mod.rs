@@ -23,6 +23,7 @@ use crate::hooks::HookRegistry;
 use crate::model::Model;
 use crate::session::SessionManager;
 use crate::tool::{Tool, ToolContext, ToolOutput};
+use tracing::debug;
 use crate::types::message::Message;
 use crate::types::tools::ToolSpec;
 
@@ -97,6 +98,69 @@ impl Agent {
         Ok(result)
     }
 
+    /// Run the loop and return a schema-constrained final answer.
+    ///
+    /// A synthetic tool carrying `spec` is registered for the duration of the
+    /// call, so the model produces the answer through the provider's own
+    /// constrained-decoding path rather than by emitting JSON into prose.
+    ///
+    /// If the model finishes without calling it, one follow-up prompt asks it
+    /// to format what it just said. That single retry is deliberate: models
+    /// commonly forget the final call once, and almost never twice, so
+    /// retrying further mostly burns tokens.
+    pub async fn prompt_structured<T>(
+        &mut self,
+        input: &str,
+        spec: crate::tool::StructuredOutputSpec,
+    ) -> crate::Result<T>
+    where
+        T: serde::de::DeserializeOwned + Send + Sync + 'static,
+    {
+        use crate::tool::{StructuredOutputSlot, StructuredOutputTool};
+
+        let name = spec.name.clone();
+        let slot = StructuredOutputSlot::<T>::new();
+
+        // Register the synthetic tool for the duration of this call only.
+        let displaced = self.tools.insert(
+            name.clone(),
+            Box::new(StructuredOutputTool::new(spec, slot.clone())),
+        );
+
+        let outcome = async {
+            self.prompt(input).await?;
+
+            if !slot.is_filled() {
+                debug!(
+                    tool_name = %name,
+                    "Model finished without structured output; prompting once to format"
+                );
+                self.prompt(crate::tool::DEFAULT_STRUCTURED_OUTPUT_PROMPT)
+                    .await?;
+            }
+
+            slot.take().ok_or_else(|| {
+                StrandsError::Other(format!(
+                    "Model did not produce structured output for {name}"
+                ))
+            })
+        }
+        .await;
+
+        // Restore the tool table whatever happened, so a failed structured
+        // call does not leave the synthetic tool advertised on later turns.
+        match displaced {
+            Some(tool) => {
+                self.tools.insert(name, tool);
+            }
+            None => {
+                self.tools.remove(&name);
+            }
+        }
+
+        outcome
+    }
+
     /// Cancel an in-progress invocation.
     pub fn cancel(&self) {
         self.cancel.store(true, Ordering::Relaxed);
@@ -107,6 +171,11 @@ impl Agent {
     /// flip cancellation from outside (e.g. a UI cancel button).
     pub fn cancel_handle(&self) -> Arc<AtomicBool> {
         self.cancel.clone()
+    }
+
+    /// Names of the tools currently registered.
+    pub fn tool_names(&self) -> impl Iterator<Item = &str> {
+        self.tools.keys().map(String::as_str)
     }
 
     /// Get the current conversation history.

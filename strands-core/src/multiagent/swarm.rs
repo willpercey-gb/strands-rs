@@ -180,15 +180,10 @@ impl Swarm {
                     let text = result.text();
                     output = text.clone();
 
-                    // Accumulate usage
-                    accumulated_usage.input_tokens = Some(
-                        accumulated_usage.input_tokens.unwrap_or(0)
-                            + result.usage.input_tokens.unwrap_or(0),
-                    );
-                    accumulated_usage.output_tokens = Some(
-                        accumulated_usage.output_tokens.unwrap_or(0)
-                            + result.usage.output_tokens.unwrap_or(0),
-                    );
+                    // Field-wise accumulation, so cache-read/write counters
+                    // survive. Summing only input/output silently loses the
+                    // numbers that make cache-point placement measurable.
+                    accumulated_usage.accumulate(&result.usage);
 
                     // Add to shared knowledge
                     shared_knowledge.push(format!("{}: {}", current_node_id, text));

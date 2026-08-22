@@ -1169,3 +1169,159 @@ async fn test_custom_tool_executor_is_used() {
     agent.prompt("greet").await.unwrap();
     assert!(*used.lock().unwrap(), "the custom executor should have run");
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 — structured output
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, serde::Deserialize, PartialEq)]
+struct Person {
+    name: String,
+    age: u32,
+}
+
+fn person_spec() -> strands_core::tool::StructuredOutputSpec {
+    strands_core::tool::StructuredOutputSpec::new(
+        "Person",
+        "A person record",
+        json!({
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "age": {"type": "integer"}},
+            "required": ["name", "age"]
+        }),
+    )
+}
+
+/// Emits a single tool call with the supplied JSON as its arguments.
+struct StructuredModel {
+    payloads: Arc<std::sync::Mutex<Vec<String>>>,
+    calls: Arc<AtomicUsize>,
+}
+
+#[async_trait]
+impl Model for StructuredModel {
+    async fn stream(
+        &self,
+        _messages: &[Message],
+        _system_prompt: Option<&SystemPrompt>,
+        _tool_specs: &[ToolSpec],
+    ) -> Result<ModelStream> {
+        let n = self.calls.fetch_add(1, Ordering::SeqCst);
+        let payload = {
+            let p = self.payloads.lock().unwrap();
+            p.get(n).cloned()
+        };
+
+        let Some(payload) = payload else {
+            // Nothing left to say — finish the turn without a tool call.
+            return Ok(Box::pin(stream::iter(vec![Ok(StreamEvent::MessageStop {
+                stop_reason: StopReason::EndTurn,
+            })])));
+        };
+
+        let events = vec![
+            Ok(StreamEvent::ContentBlockStart {
+                index: 0,
+                content_type: ContentBlockType::ToolUse {
+                    tool_use_id: format!("call_{n}"),
+                    name: "Person".to_string(),
+                    reasoning_signature: None,
+                },
+            }),
+            Ok(StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: DeltaContent::ToolInputDelta(payload),
+            }),
+            Ok(StreamEvent::ContentBlockStop { index: 0 }),
+            Ok(StreamEvent::MessageStop {
+                stop_reason: StopReason::ToolUse,
+            }),
+        ];
+        Ok(Box::pin(stream::iter(events)))
+    }
+}
+
+fn structured_agent(payloads: Vec<&str>) -> Agent {
+    Agent::builder()
+        .model(StructuredModel {
+            payloads: Arc::new(std::sync::Mutex::new(
+                payloads.into_iter().map(String::from).collect(),
+            )),
+            calls: Arc::new(AtomicUsize::new(0)),
+        })
+        .max_cycles(10)
+        .build()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn test_structured_output_returns_a_typed_value() {
+    let mut agent = structured_agent(vec![r#"{"name":"Ada","age":36}"#]);
+
+    let person: Person = agent
+        .prompt_structured("describe Ada", person_spec())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        person,
+        Person {
+            name: "Ada".into(),
+            age: 36
+        }
+    );
+}
+
+#[tokio::test]
+async fn test_structured_output_lets_the_model_correct_itself() {
+    // First attempt omits a required field; the validation error goes back to
+    // the model, which fixes it on the next turn.
+    let mut agent = structured_agent(vec![
+        r#"{"name":"Ada"}"#,
+        r#"{"name":"Ada","age":36}"#,
+    ]);
+
+    let person: Person = agent
+        .prompt_structured("describe Ada", person_spec())
+        .await
+        .unwrap();
+
+    assert_eq!(person.age, 36);
+}
+
+#[tokio::test]
+async fn test_structured_output_errors_when_never_produced() {
+    let mut agent = structured_agent(vec![]);
+
+    let result: Result<Person> = agent.prompt_structured("describe Ada", person_spec()).await;
+
+    assert!(
+        result.is_err(),
+        "a run that never produced the structure must fail, not return a default"
+    );
+}
+
+#[tokio::test]
+async fn test_structured_output_tool_is_not_advertised_afterwards() {
+    let mut agent = structured_agent(vec![r#"{"name":"Ada","age":36}"#]);
+
+    let _: Person = agent
+        .prompt_structured("describe Ada", person_spec())
+        .await
+        .unwrap();
+
+    // Leaving the synthetic tool registered would let later, unrelated turns
+    // call it.
+    assert!(
+        !agent.tool_names().any(|n| n == "Person"),
+        "the synthetic tool must be removed once the call completes"
+    );
+}
+
+#[tokio::test]
+async fn test_structured_output_tool_is_removed_after_a_failure_too() {
+    let mut agent = structured_agent(vec![]);
+    let _: Result<Person> = agent.prompt_structured("describe Ada", person_spec()).await;
+
+    assert!(!agent.tool_names().any(|n| n == "Person"));
+}

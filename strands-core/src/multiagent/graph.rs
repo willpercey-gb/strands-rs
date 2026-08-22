@@ -18,6 +18,31 @@ pub struct GraphState {
     pub results: HashMap<String, NodeResult>,
     /// The original task input.
     pub task: String,
+    /// Caller-supplied state threaded through the whole graph run.
+    ///
+    /// Lets a condition branch on something the graph itself never produced —
+    /// a feature flag, a tenant id, a budget — without smuggling it through
+    /// node output text.
+    pub invocation_state: serde_json::Value,
+}
+
+impl GraphState {
+    /// Read a field from [`invocation_state`](Self::invocation_state).
+    pub fn invocation_value(&self, key: &str) -> Option<&serde_json::Value> {
+        self.invocation_state.get(key)
+    }
+
+    /// Whether a node completed successfully.
+    pub fn succeeded(&self, node_id: &str) -> bool {
+        self.results
+            .get(node_id)
+            .is_some_and(|r| r.status == NodeStatus::Completed)
+    }
+
+    /// A completed node's text output.
+    pub fn output_of(&self, node_id: &str) -> Option<String> {
+        self.results.get(node_id).and_then(|r| r.text())
+    }
 }
 
 /// A condition function that determines whether an edge should be traversed.
@@ -103,6 +128,19 @@ impl Graph {
 
     /// Run the graph with the given task.
     pub async fn run(&self, task: &str) -> Result<MultiAgentResult, StrandsError> {
+        self.run_with_state(task, serde_json::Value::Null).await
+    }
+
+    /// Run the graph, threading `invocation_state` through to every edge
+    /// condition.
+    ///
+    /// Use this when traversal depends on something outside the graph — a
+    /// feature flag, a tenant, a budget — rather than on node output.
+    pub async fn run_with_state(
+        &self,
+        task: &str,
+        invocation_state: serde_json::Value,
+    ) -> Result<MultiAgentResult, StrandsError> {
         let start = Instant::now();
         let mut results: HashMap<String, NodeResult> = HashMap::new();
         let mut execution_order: Vec<String> = Vec::new();
@@ -180,14 +218,10 @@ impl Graph {
                     let text = result.text();
                     output = text.clone();
 
-                    accumulated_usage.input_tokens = Some(
-                        accumulated_usage.input_tokens.unwrap_or(0)
-                            + result.usage.input_tokens.unwrap_or(0),
-                    );
-                    accumulated_usage.output_tokens = Some(
-                        accumulated_usage.output_tokens.unwrap_or(0)
-                            + result.usage.output_tokens.unwrap_or(0),
-                    );
+                    // Field-wise accumulation, so cache-read/write counters
+                    // survive. Summing only input/output silently loses the
+                    // numbers that make cache-point placement measurable.
+                    accumulated_usage.accumulate(&result.usage);
 
                     NodeResult {
                         node_id: node_id.clone(),
@@ -239,6 +273,7 @@ impl Graph {
             let graph_state = GraphState {
                 results: results.clone(),
                 task: task.to_string(),
+                invocation_state: invocation_state.clone(),
             };
 
             if let Some(out_edges) = adjacency.get(&node_id) {

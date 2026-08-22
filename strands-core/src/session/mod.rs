@@ -1,4 +1,5 @@
 pub mod file;
+pub mod snapshot;
 pub mod repository;
 
 use async_trait::async_trait;
@@ -16,3 +17,6 @@ pub trait SessionManager: Send + Sync {
 
 pub use file::FileSessionManager;
 pub use repository::{RepositorySessionManager, SessionRepository};
+pub use snapshot::{
+    InMemorySnapshotStore, Snapshot, SnapshotStore, SNAPSHOT_VERSION,
+};
