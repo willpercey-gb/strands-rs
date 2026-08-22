@@ -8,5 +8,6 @@ members = [
     "strands-gemini-cli",
     "strands-macros",
     "strands-claude-mcp",
+    "strands-tools",
 ]
 resolver = "2"

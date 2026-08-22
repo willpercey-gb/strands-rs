@@ -34,7 +34,7 @@ impl CheckpointPolicy {
             // A zero interval would mean "never", which `Manual` already says
             // more clearly; treat it as every turn rather than dividing by zero.
             CheckpointPolicy::EveryNTurns(0) => true,
-            CheckpointPolicy::EveryNTurns(n) => turn % n == 0,
+            CheckpointPolicy::EveryNTurns(n) => turn.is_multiple_of(*n),
             CheckpointPolicy::Manual => false,
         }
     }

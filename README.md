@@ -63,6 +63,7 @@ async fn main() -> strands_core::Result<()> {
 | `strands-codex-cli` | OpenAI Codex CLI adapter |
 | `strands-gemini-cli` | Gemini CLI adapter |
 | `strands-claude-mcp` | Expose your strands tools as a dynamic MCP server; auto-register with Claude Code |
+| `strands-tools` | Ready-made tools — shell, file editor, HTTP, sleep, stop |
 | `strands-macros` | `#[tool]` proc macro for ergonomic tool definition |
 
 ## Multi-Agent Example
