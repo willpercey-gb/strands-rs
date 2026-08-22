@@ -1,4 +1,5 @@
 pub mod defaults;
+pub mod routing;
 pub mod tokens;
 
 use async_trait::async_trait;
@@ -10,6 +11,7 @@ use crate::types::{
 };
 
 pub use defaults::{get_context_window_limit, DEFAULT_CONTEXT_WINDOW_LIMIT};
+pub use routing::{FallbackStrategy, ModelRouter, PredicateStrategy, RoutingStrategy, StaticStrategy};
 
 /// A boxed async stream of model events.
 pub type ModelStream = BoxStream<'static, Result<StreamEvent, StrandsError>>;
