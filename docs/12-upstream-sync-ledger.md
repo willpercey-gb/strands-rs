@@ -173,8 +173,8 @@ Fixes against subsystems strands-rs has, not already covered above.
 | `[ ]` | Handle `None`/empty text in message content sanitization | v1.45, v1.51 `fix(core)` ×2 |
 | `[ ]` | Include reasoning block with empty text and non-empty signature | v1.51 `fix(core)` |
 | `[ ]` | Event loop: log exception type, not full traceback, on cycle failure | v1.46 `fix(event_loop)` |
-| `[ ]` | Clarify max-tokens-reached error message | v1.44 `fix(core)` |
-| `[ ]` | Recover message on max tokens reached | pre-existing `event_loop/_recover_message_on_max_tokens_reached.py`, never ported |
+| `[x]` | Clarify max-tokens-reached error message | v1.44 `fix(core)` |
+| `[x]` | Recover message on max tokens reached | pre-existing `event_loop/_recover_message_on_max_tokens_reached.py`, never ported |
 | `[ ]` | Tools: load directory tools under a namespaced module key | v1.50 `fix(tools)` — only if a tool loader is ported |
 
 ---

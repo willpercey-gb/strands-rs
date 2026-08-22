@@ -175,11 +175,27 @@ fn list_tools(client: &BridgeClient) -> Result<Value, (i64, String)> {
     let mcp_tools: Vec<Value> = arr
         .into_iter()
         .map(|d| {
-            json!({
+            let mut tool = json!({
                 "name": d.get("name").cloned().unwrap_or(Value::Null),
                 "description": d.get("description").cloned().unwrap_or(Value::Null),
                 "inputSchema": d.get("input_schema").cloned().unwrap_or(json!({"type": "object"})),
-            })
+            });
+
+            // Only emit the optional fields when present: MCP treats a missing
+            // annotation as "unknown", which is not the same as a false one.
+            if let Some(map) = tool.as_object_mut() {
+                if let Some(schema) = d.get("output_schema") {
+                    if !schema.is_null() {
+                        map.insert("outputSchema".to_string(), schema.clone());
+                    }
+                }
+                if let Some(annotations) = d.get("annotations") {
+                    if !annotations.is_null() {
+                        map.insert("annotations".to_string(), annotations.clone());
+                    }
+                }
+            }
+            tool
         })
         .collect();
     Ok(json!({ "tools": mcp_tools }))

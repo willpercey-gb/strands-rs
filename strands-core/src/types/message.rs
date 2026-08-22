@@ -221,3 +221,119 @@ mod tests {
         assert_eq!(m.text(), "hi");
     }
 }
+
+/// Clean up a message truncated by the model's output cap.
+///
+/// A response cut short at `max_tokens` can leave a `ToolUse` whose input was
+/// never finished. Executing it would run the tool with arguments the model did
+/// not actually choose, so every tool use is replaced with text explaining what
+/// happened — complete-looking ones included, since there is no way to tell a
+/// finished call from one truncated at exactly the right byte.
+///
+/// Non-tool content is preserved: whatever the model did manage to say is still
+/// worth keeping.
+///
+/// Ported from upstream `event_loop/_recover_message_on_max_tokens_reached.py`.
+pub fn recover_message_on_max_tokens(message: &Message) -> Message {
+    let content = message
+        .content
+        .iter()
+        .map(|block| match block {
+            ContentBlock::ToolUse { name, .. } => ContentBlock::Text {
+                text: format!(
+                    "The selected tool {name}'s tool use was incomplete due to \
+                     maximum token limits being reached."
+                ),
+            },
+            other => other.clone(),
+        })
+        .collect();
+
+    Message {
+        role: message.role,
+        content,
+        tracking_id: message.tracking_id.clone(),
+        metadata: message.metadata.clone(),
+    }
+}
+
+#[cfg(test)]
+mod max_tokens_tests {
+    use super::*;
+    use crate::types::content::ContentBlock;
+    use serde_json::json;
+
+    fn truncated() -> Message {
+        Message::assistant(vec![
+            ContentBlock::Text {
+                text: "Let me calculate that".into(),
+            },
+            ContentBlock::ToolUse {
+                tool_use_id: "1".into(),
+                name: "calculator".into(),
+                input: json!({"expression": "2+"}),
+            },
+        ])
+    }
+
+    #[test]
+    fn tool_uses_are_replaced_with_an_explanation() {
+        // Executing a half-written call would run the tool with arguments the
+        // model never actually chose.
+        let recovered = recover_message_on_max_tokens(&truncated());
+
+        assert!(!recovered.has_tool_use());
+        assert!(recovered.text().contains("calculator"));
+        assert!(recovered.text().contains("maximum token limits"));
+    }
+
+    #[test]
+    fn other_content_survives() {
+        let recovered = recover_message_on_max_tokens(&truncated());
+        assert!(
+            recovered.text().contains("Let me calculate that"),
+            "whatever the model managed to say is still worth keeping"
+        );
+    }
+
+    #[test]
+    fn a_message_without_tool_uses_is_unchanged() {
+        let message = Message::assistant(vec![ContentBlock::Text {
+            text: "just text".into(),
+        }]);
+        assert_eq!(recover_message_on_max_tokens(&message).text(), "just text");
+    }
+
+    #[test]
+    fn bookkeeping_is_preserved() {
+        let mut message = truncated();
+        let id = message.ensure_tracking_id().to_string();
+
+        let recovered = recover_message_on_max_tokens(&message);
+        assert_eq!(recovered.tracking_id.as_deref(), Some(id.as_str()));
+        assert_eq!(recovered.role, Role::Assistant);
+    }
+
+    #[test]
+    fn every_tool_use_is_replaced_not_just_the_last() {
+        // There is no way to tell a finished call from one truncated at exactly
+        // the right byte, so all of them go.
+        let message = Message::assistant(vec![
+            ContentBlock::ToolUse {
+                tool_use_id: "1".into(),
+                name: "first".into(),
+                input: json!({}),
+            },
+            ContentBlock::ToolUse {
+                tool_use_id: "2".into(),
+                name: "second".into(),
+                input: json!({}),
+            },
+        ]);
+
+        let recovered = recover_message_on_max_tokens(&message);
+        assert!(!recovered.has_tool_use());
+        assert!(recovered.text().contains("first"));
+        assert!(recovered.text().contains("second"));
+    }
+}

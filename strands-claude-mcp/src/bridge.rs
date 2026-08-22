@@ -36,6 +36,11 @@ impl Bridge {
         self.port
     }
 
+    /// The tools this bridge exposes.
+    pub fn registry(&self) -> &ToolRegistry {
+        &self.registry
+    }
+
     /// Spawn the listener and return immediately.
     ///
     /// If a Tokio runtime is already active on the current thread (e.g. you're

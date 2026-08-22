@@ -82,3 +82,43 @@ fn the_advertised_name_is_the_callable_name() {
     assert_eq!(result["is_error"], json!(false), "calling `{advertised}` failed");
     assert_eq!(result["content"]["hello"], json!("world"));
 }
+
+/// A tool that declares MCP annotations and an output schema.
+struct Annotated;
+
+#[async_trait]
+impl Tool for Annotated {
+    fn name(&self) -> &str {
+        "annotated"
+    }
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new("annotated", "does something risky", json!({"type": "object"}))
+            .with_output_schema(json!({"type": "string"}))
+            .with_annotations(strands_core::types::tools::ToolAnnotations {
+                destructive_hint: Some(true),
+                read_only_hint: Some(false),
+                ..Default::default()
+            })
+    }
+    async fn invoke(&self, input: Value, _ctx: &ToolContext) -> Result<ToolOutput, StrandsError> {
+        Ok(ToolOutput::success(input))
+    }
+}
+
+#[test]
+fn annotations_and_output_schema_reach_the_descriptor() {
+    // MCP clients surface annotations when asking the user to approve a call;
+    // dropping them makes a destructive tool look unremarkable.
+    let bridge = Bridge::builder("annotations-test").tool(Annotated).build();
+    let descriptors = bridge.registry().descriptors();
+
+    let tool = descriptors
+        .iter()
+        .find(|d| d.name == "annotated")
+        .expect("tool present");
+
+    let annotations = tool.annotations.as_ref().expect("annotations forwarded");
+    assert!(annotations.is_destructive());
+    assert!(!annotations.is_read_only());
+    assert!(tool.output_schema.is_some());
+}

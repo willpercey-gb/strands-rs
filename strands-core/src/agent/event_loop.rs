@@ -372,6 +372,17 @@ pub(crate) async fn run_loop(
         );
         stop_reason = model_stop_reason;
 
+        // A response truncated at the output cap can carry a half-written tool
+        // call; running it would use arguments the model never chose.
+        let content_blocks = if model_stop_reason == StopReason::MaxTokens {
+            crate::types::message::recover_message_on_max_tokens(&Message::assistant(
+                content_blocks,
+            ))
+            .content
+        } else {
+            content_blocks
+        };
+
         // Build and append assistant message, stamped with a durable id and
         // the usage/metrics of the call that produced it.
         let mut assistant_msg = Message::assistant(content_blocks);

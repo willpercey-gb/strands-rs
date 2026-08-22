@@ -63,6 +63,16 @@ pub struct ToolDescriptor {
     pub name: String,
     pub description: String,
     pub input_schema: Value,
+    /// JSON Schema for the tool's output, when it declares one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_schema: Option<Value>,
+    /// Behavioural hints (readOnlyHint, destructiveHint, ...).
+    ///
+    /// Forwarded because MCP clients surface these to the user when deciding
+    /// whether to approve a call; dropping them makes every tool look equally
+    /// unremarkable, which is exactly wrong for a destructive one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub annotations: Option<strands_core::types::tools::ToolAnnotations>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -139,7 +149,8 @@ impl BridgeClient {
 // ---------------------------------------------------------------------------
 
 #[derive(Clone)]
-pub(crate) struct ToolRegistry {
+/// The set of tools a bridge exposes.
+pub struct ToolRegistry {
     /// Tool name → strands tool. Keys are the tools' own names; the MCP
     /// client namespaces by server, so collisions between host apps are
     /// already handled a layer up.
@@ -156,6 +167,8 @@ impl ToolRegistry {
                     name: name.clone(),
                     description: spec.description,
                     input_schema: spec.input_schema,
+                    output_schema: spec.output_schema,
+                    annotations: spec.annotations,
                 }
             })
             .collect()
