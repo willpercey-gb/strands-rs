@@ -3,6 +3,7 @@ pub mod conversation;
 pub mod error;
 pub mod hooks;
 pub mod interrupt;
+pub mod interventions;
 pub mod memory;
 pub mod middleware;
 pub mod model;
@@ -20,6 +21,9 @@ pub use conversation::ConversationManager;
 pub use error::{classify_cli_failure, Result, StrandsError};
 pub use hooks::{Hook, HookEvent, HookRegistry};
 pub use interrupt::{Interrupt, InterruptResponse, InterruptState};
+pub use interventions::{
+    InterventionAction, InterventionContext, InterventionHandler, InterventionRegistry,
+};
 pub use memory::{MemoryManager, MemoryRecord, MemoryStore};
 pub use middleware::{Middleware, MiddlewareChain, Next};
 pub use model::Model;

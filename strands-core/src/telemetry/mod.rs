@@ -37,7 +37,7 @@ pub mod attributes {
 /// deliberately, so the default is to redact.
 ///
 /// Matches upstream's `gen_ai_span_attributes_only` / span-redaction work.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct RedactionPolicy {
     /// Include tool call arguments in spans.
     pub include_tool_arguments: bool,
@@ -45,16 +45,6 @@ pub struct RedactionPolicy {
     pub include_tool_results: bool,
     /// Include message content in spans.
     pub include_message_content: bool,
-}
-
-impl Default for RedactionPolicy {
-    fn default() -> Self {
-        Self {
-            include_tool_arguments: false,
-            include_tool_results: false,
-            include_message_content: false,
-        }
-    }
 }
 
 impl RedactionPolicy {
