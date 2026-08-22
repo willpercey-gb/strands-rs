@@ -247,8 +247,27 @@ impl Agent {
             name: name.into(),
             description: description.into(),
             agent: Arc::new(tokio::sync::Mutex::new(self)),
+            mode: DelegationMode::FreshPrompt,
         }
     }
+}
+
+/// How a sub-agent receives work from its caller.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DelegationMode {
+    /// The sub-agent sees only the prompt it is given.
+    ///
+    /// Cheapest and most predictable: the sub-agent cannot be confused or
+    /// steered by the caller's history.
+    FreshPrompt,
+    /// The sub-agent is seeded with the caller's conversation, then prompted.
+    ///
+    /// For work that genuinely depends on what came before — a reviewer that
+    /// needs to see what was written, not a summary of it. Costs the full
+    /// history in tokens on every call, which is why it is not the default.
+    ///
+    /// Upstream v1.53 `feat(py): add agent-as-tool delegation`.
+    SharedContext,
 }
 
 // ---------------------------------------------------------------------------
@@ -260,6 +279,28 @@ pub struct AgentTool {
     name: String,
     description: String,
     agent: Arc<tokio::sync::Mutex<Agent>>,
+    mode: DelegationMode,
+}
+
+impl AgentTool {
+    /// Hand the sub-agent the caller's conversation before prompting it.
+    pub fn with_shared_context(mut self) -> Self {
+        self.mode = DelegationMode::SharedContext;
+        self
+    }
+
+    pub fn mode(&self) -> DelegationMode {
+        self.mode
+    }
+
+    /// Seed the sub-agent with `messages` before its next invocation.
+    ///
+    /// Only meaningful in [`DelegationMode::SharedContext`].
+    pub async fn share_context(&self, messages: Vec<Message>) {
+        if self.mode == DelegationMode::SharedContext {
+            self.agent.lock().await.set_messages(messages);
+        }
+    }
 }
 
 #[async_trait::async_trait]

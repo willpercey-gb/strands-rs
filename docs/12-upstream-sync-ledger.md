@@ -85,7 +85,7 @@ Items that touch subsystems strands-rs already has.
 
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
-| `[ ]` | Agent-as-tool delegation | v1.53 `feat(py): add agent-as-tool delegation` | `agent/_agent_delegation.py`. Richer than the current `AgentTool` wrapper — supports handing the sub-agent the live conversation rather than a fresh prompt. |
+| `[x]` | Agent-as-tool delegation | v1.53 `feat(py): add agent-as-tool delegation` | `agent/_agent_delegation.py`. Richer than the current `AgentTool` wrapper — supports handing the sub-agent the live conversation rather than a fresh prompt. |
 | `[x]` | Structured output | pre-existing upstream, never ported | `tools/structured_output/`. Schema-constrained responses via a synthetic tool. Sizeable. |
 | `[x]` | Pluggable tool executors | pre-existing upstream, never ported | strands-rs has a `concurrent_tools: bool`; upstream has a `ToolExecutor` trait with concurrent/sequential impls. Needed before middleware's `ExecuteToolStage`. |
 | `[x]` | Bound tool schema normalization recursion | v1.49 `fix(core): bound tool schema normalization recursion depth` | |
@@ -152,7 +152,7 @@ Fresh ports. Each is self-contained; order within the phase is by dependency.
 | `[x]` | **Vended tools** | v1.50 (×3), v1.53 | `vended_tools/` — `shell` (renamed from `bash` in v1.50, breaking; keep deprecated aliases per v1.51 fix), `http_request`, `sleep`, `stop`, `file_editor`. |
 | `[x]` | **Context offloader plugin** | v1.38, v1.44, v1.45, v1.51 + fixes | `vended_plugins/context_offloader/{plugin,storage,search}`. Large tool result offload (v1.38), turn-based eviction (v1.44), search/grep retrieval (v1.45), `should_offload` callback (v1.51). Depends on unified storage. |
 | `[x]` | **Skills plugin** | pre-existing + v1.37-era fix | `vended_plugins/skills/`. Plus `fix(skills): preserve cache points in system prompt during skills injection` — depends on Phase 0 cache points. |
-| `[ ]` | **Goal loop plugin** | v1.44 `feat(strands-py): add GoalLoop vended plugin` | `vended_plugins/goal/{plugin,judge}`. |
+| `[x]` | **Goal loop plugin** | v1.44 `feat(strands-py): add GoalLoop vended plugin` | `vended_plugins/goal/{plugin,judge}`. |
 | `[ ]` | **Context injector plugin** | pre-existing + v1.53 `feat: add injected content behind cache points` | `vended_plugins/context_injector/` and `injection/{_message_injection,_xml,types}`. |
 | `[ ]` | **Steering plugin** | pre-existing, never ported | `vended_plugins/steering/` — context providers, actions, LLM handler + mappers. Note upstream has it in both `experimental/` and `vended_plugins/`; take `vended_plugins/`. |
 | `[ ]` | Plugin discovery | v1.44-era `plugins/_discovery.py` | |

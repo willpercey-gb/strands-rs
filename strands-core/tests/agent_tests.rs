@@ -1896,3 +1896,90 @@ async fn test_a_persistent_overflow_surfaces_rather_than_looping() {
         "got {result:?}"
     );
 }
+
+// ---------------------------------------------------------------------------
+// Phase 1 — agent-as-tool delegation
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_agent_as_tool_defaults_to_a_fresh_prompt() {
+    use strands_core::agent::DelegationMode;
+
+    let sub = Agent::builder()
+        .model(MockTextModel {
+            response: "sub-agent says hi".to_string(),
+        })
+        .build()
+        .unwrap();
+
+    let tool = sub.as_tool("helper", "Delegates work");
+    assert_eq!(tool.mode(), DelegationMode::FreshPrompt);
+
+    let out = tool
+        .invoke(json!({"prompt": "do the thing"}), &ToolContext::default())
+        .await
+        .unwrap();
+
+    assert!(!out.is_error);
+    assert_eq!(out.content.as_str().unwrap(), "sub-agent says hi");
+}
+
+#[tokio::test]
+async fn test_shared_context_delegation_seeds_the_sub_agent() {
+    use strands_core::agent::DelegationMode;
+
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sub = Agent::builder()
+        .model(CapturingModel {
+            seen_messages: seen.clone(),
+            seen_system: Arc::new(std::sync::Mutex::new(None)),
+        })
+        .build()
+        .unwrap();
+
+    let tool = sub.as_tool("reviewer", "Reviews work").with_shared_context();
+    assert_eq!(tool.mode(), DelegationMode::SharedContext);
+
+    tool.share_context(vec![Message::user("earlier context")])
+        .await;
+
+    tool.invoke(json!({"prompt": "review it"}), &ToolContext::default())
+        .await
+        .unwrap();
+
+    let seen = seen.lock().unwrap();
+    let texts: Vec<String> = seen.iter().map(|m| m.text()).collect();
+    assert!(
+        texts.iter().any(|t| t.contains("earlier context")),
+        "the shared history should reach the sub-agent: {texts:?}"
+    );
+    assert!(texts.iter().any(|t| t.contains("review it")));
+}
+
+#[tokio::test]
+async fn test_fresh_prompt_delegation_ignores_shared_context() {
+    // The cheapest mode must genuinely not carry the caller's history, or the
+    // token cost of SharedContext would be paid without asking for it.
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sub = Agent::builder()
+        .model(CapturingModel {
+            seen_messages: seen.clone(),
+            seen_system: Arc::new(std::sync::Mutex::new(None)),
+        })
+        .build()
+        .unwrap();
+
+    let tool = sub.as_tool("helper", "Helps");
+    tool.share_context(vec![Message::user("should not appear")])
+        .await;
+
+    tool.invoke(json!({"prompt": "go"}), &ToolContext::default())
+        .await
+        .unwrap();
+
+    let seen = seen.lock().unwrap();
+    assert!(
+        !seen.iter().any(|m| m.text().contains("should not appear")),
+        "fresh-prompt delegation must not carry the caller's history"
+    );
+}
