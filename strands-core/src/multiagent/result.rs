@@ -158,6 +158,7 @@ mod tests {
                 usage: Usage::default(),
                 metrics: Metrics::default(),
                 cycle_count: 1,
+                interrupts: Vec::new(),
             }),
             error: error.map(String::from),
             execution_time: Duration::from_millis(1500),

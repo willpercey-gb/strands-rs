@@ -16,6 +16,7 @@ use tracing::{debug, warn};
 
 use crate::hooks::events::{AfterToolCallEvent, BeforeToolCallEvent, HookEvent};
 use crate::hooks::registry::HookRegistry;
+use crate::interrupt::InterruptState;
 use crate::types::content::{ContentBlock, ToolResultContent, ToolResultStatus};
 
 use super::{Tool, ToolContext, ToolOutput};
@@ -42,6 +43,7 @@ pub trait ToolExecutor: Send + Sync {
         calls: &[ToolCall<'_>],
         ctx: &ToolContext,
         hooks: &HookRegistry,
+        interrupts: &mut InterruptState,
     ) -> Vec<ContentBlock>;
 
     /// Human-readable name, for logs and diagnostics.
@@ -79,17 +81,28 @@ async fn invoke_one(
 }
 
 /// Fire `BeforeToolCall` and report whether the hook cancelled the call.
-fn dispatch_before(hooks: &HookRegistry, call: &ToolCall<'_>) -> bool {
+///
+/// The interrupt state is moved into the event and back out again, so a hook
+/// that pauses for human input records the request where the agent loop can
+/// see it.
+fn dispatch_before(
+    hooks: &HookRegistry,
+    call: &ToolCall<'_>,
+    interrupts: &mut InterruptState,
+) -> bool {
     let mut event = HookEvent::BeforeToolCall(BeforeToolCallEvent {
         tool_name: call.name.to_string(),
         input: call.input.clone(),
         cancel: false,
+        interrupts: std::mem::take(interrupts),
     });
     hooks.dispatch(&mut event);
-    matches!(
-        event,
-        HookEvent::BeforeToolCall(BeforeToolCallEvent { cancel: true, .. })
-    )
+
+    let HookEvent::BeforeToolCall(event) = event else {
+        unreachable!("dispatch must not change the event variant")
+    };
+    *interrupts = event.interrupts;
+    event.cancel
 }
 
 /// Fire `AfterToolCall` and report whether the hook asked for a retry.
@@ -176,10 +189,11 @@ impl ToolExecutor for SequentialToolExecutor {
         calls: &[ToolCall<'_>],
         ctx: &ToolContext,
         hooks: &HookRegistry,
+        interrupts: &mut InterruptState,
     ) -> Vec<ContentBlock> {
         let mut results = Vec::with_capacity(calls.len());
         for call in calls {
-            let cancelled = dispatch_before(hooks, call);
+            let cancelled = dispatch_before(hooks, call, interrupts);
             let output = run_with_hooks(tools, call, ctx, hooks, cancelled).await;
             results.push(to_result_block(call.tool_use_id, &output));
         }
@@ -207,10 +221,15 @@ impl ToolExecutor for ConcurrentToolExecutor {
         calls: &[ToolCall<'_>],
         ctx: &ToolContext,
         hooks: &HookRegistry,
+        interrupts: &mut InterruptState,
     ) -> Vec<ContentBlock> {
-        // Decide cancellation up front and in order — hooks are synchronous
-        // and may depend on the sequence they observe.
-        let cancelled: Vec<bool> = calls.iter().map(|c| dispatch_before(hooks, c)).collect();
+        // Decide cancellation up front and in order — hooks are synchronous,
+        // may depend on the sequence they observe, and share one interrupt
+        // state that cannot be borrowed across concurrent futures.
+        let cancelled: Vec<bool> = calls
+            .iter()
+            .map(|c| dispatch_before(hooks, c, interrupts))
+            .collect();
 
         let futures = calls.iter().zip(&cancelled).map(|(call, &cancelled)| {
             let started = Instant::now();
@@ -328,7 +347,13 @@ mod tests {
         ];
 
         executor
-            .execute(&tools, &calls, &ToolContext::default(), &HookRegistry::new())
+            .execute(
+                &tools,
+                &calls,
+                &ToolContext::default(),
+                &HookRegistry::new(),
+                &mut InterruptState::new(),
+            )
             .await
     }
 
@@ -380,7 +405,13 @@ mod tests {
         ];
 
         ConcurrentToolExecutor
-            .execute(&tools, &calls, &ToolContext::default(), &HookRegistry::new())
+            .execute(
+                &tools,
+                &calls,
+                &ToolContext::default(),
+                &HookRegistry::new(),
+                &mut InterruptState::new(),
+            )
             .await;
 
         assert_eq!(
@@ -402,10 +433,22 @@ mod tests {
 
         for blocks in [
             SequentialToolExecutor
-                .execute(&tools, &calls, &ToolContext::default(), &HookRegistry::new())
+                .execute(
+                &tools,
+                &calls,
+                &ToolContext::default(),
+                &HookRegistry::new(),
+                &mut InterruptState::new(),
+            )
                 .await,
             ConcurrentToolExecutor
-                .execute(&tools, &calls, &ToolContext::default(), &HookRegistry::new())
+                .execute(
+                &tools,
+                &calls,
+                &ToolContext::default(),
+                &HookRegistry::new(),
+                &mut InterruptState::new(),
+            )
                 .await,
         ] {
             match &blocks[0] {
@@ -464,11 +507,23 @@ mod tests {
 
             if concurrent {
                 ConcurrentToolExecutor
-                    .execute(&tools, &calls, &ToolContext::default(), &hooks)
+                    .execute(
+                        &tools,
+                        &calls,
+                        &ToolContext::default(),
+                        &hooks,
+                        &mut InterruptState::new(),
+                    )
                     .await;
             } else {
                 SequentialToolExecutor
-                    .execute(&tools, &calls, &ToolContext::default(), &hooks)
+                    .execute(
+                        &tools,
+                        &calls,
+                        &ToolContext::default(),
+                        &hooks,
+                        &mut InterruptState::new(),
+                    )
                     .await;
             }
 
@@ -504,11 +559,23 @@ mod tests {
 
             if concurrent {
                 ConcurrentToolExecutor
-                    .execute(&tools, &calls, &ToolContext::default(), &hooks)
+                    .execute(
+                        &tools,
+                        &calls,
+                        &ToolContext::default(),
+                        &hooks,
+                        &mut InterruptState::new(),
+                    )
                     .await;
             } else {
                 SequentialToolExecutor
-                    .execute(&tools, &calls, &ToolContext::default(), &hooks)
+                    .execute(
+                        &tools,
+                        &calls,
+                        &ToolContext::default(),
+                        &hooks,
+                        &mut InterruptState::new(),
+                    )
                     .await;
             }
 
@@ -523,7 +590,13 @@ mod tests {
     async fn empty_batch_returns_no_results() {
         let tools: HashMap<String, Box<dyn Tool>> = HashMap::new();
         let blocks = SequentialToolExecutor
-            .execute(&tools, &[], &ToolContext::default(), &HookRegistry::new())
+            .execute(
+                &tools,
+                &[],
+                &ToolContext::default(),
+                &HookRegistry::new(),
+                &mut InterruptState::new(),
+            )
             .await;
         assert!(blocks.is_empty());
     }

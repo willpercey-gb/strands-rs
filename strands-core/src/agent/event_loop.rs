@@ -11,6 +11,7 @@ use crate::conversation::{ConversationManager, ReduceContext};
 use crate::error::StrandsError;
 use crate::hooks::events::*;
 use crate::hooks::registry::HookRegistry;
+use crate::interrupt::InterruptState;
 use crate::model::Model;
 use crate::tool::{Tool, ToolCall, ToolContext, ToolExecutor, ToolOutput};
 use crate::types::content::{ContentBlock, ReasoningContent, SystemPrompt, ToolResultStatus};
@@ -228,6 +229,7 @@ pub(crate) async fn run_loop(
     invocation_state: &mut Value,
     tool_executor: &dyn ToolExecutor,
     limits: &Limits,
+    interrupts: &mut InterruptState,
 ) -> crate::Result<AgentResult> {
     let tool_specs: Vec<_> = tools.values().map(|t| t.spec()).collect();
     let tool_ctx = ToolContext {
@@ -411,7 +413,9 @@ pub(crate) async fn run_loop(
                     input,
                 })
                 .collect();
-            tool_executor.execute(tools, &calls, &tool_ctx, hooks).await
+            tool_executor
+                .execute(tools, &calls, &tool_ctx, hooks, interrupts)
+                .await
         };
 
         // AfterTools — dispatched in reverse hook order.
@@ -451,6 +455,18 @@ pub(crate) async fn run_loop(
             stop_reason = StopReason::EndTurn;
             break;
         }
+
+        // A hook that paused for human input stops the loop here, after the
+        // tool results are already in the history — so resuming continues from
+        // a valid conversation rather than a severed tool pair.
+        if interrupts.has_pending() {
+            debug!(
+                pending = interrupts.pending().len(),
+                "Pausing for human input"
+            );
+            stop_reason = StopReason::Interrupt;
+            break;
+        }
     }
 
     // AfterInvocation — hooks can request resume
@@ -465,6 +481,7 @@ pub(crate) async fn run_loop(
     *invocation_state = tool_ctx.state;
 
     Ok(AgentResult {
+        interrupts: interrupts.pending(),
         stop_reason,
         message: last_assistant_message.unwrap_or_else(|| Message::assistant(vec![])),
         usage: total_usage,

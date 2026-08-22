@@ -45,6 +45,9 @@ pub struct Agent {
     pub(crate) tool_executor: Box<dyn crate::tool::ToolExecutor>,
     /// Per-invocation budget caps.
     pub(crate) limits: Limits,
+    /// Interrupts raised and answered, retained across invocations so a
+    /// resumed run can find its answers.
+    pub(crate) interrupts: crate::interrupt::InterruptState,
     /// Per-invocation state, persisted across cycles within a single prompt() call.
     pub(crate) invocation_state: serde_json::Value,
     /// User-defined persistent state, preserved across invocations and
@@ -86,8 +89,15 @@ impl Agent {
             &mut self.invocation_state,
             self.tool_executor.as_ref(),
             &self.limits,
+            &mut self.interrupts,
         )
         .await?;
+
+        // A run that finished without pausing must not carry a stale request
+        // into the next one; answers are kept for the rest of the cycle.
+        if result.stop_reason != crate::types::streaming::StopReason::Interrupt {
+            self.interrupts.clear_unanswered();
+        }
 
         // Persist if session manager is configured
         if let Some(ref sm) = self.session_manager {
@@ -159,6 +169,20 @@ impl Agent {
         }
 
         outcome
+    }
+
+    /// Supply answers to pending interrupts.
+    ///
+    /// Returns how many were applied. Re-invoke with
+    /// [`prompt`](Self::prompt) afterwards to continue the paused run; the
+    /// hook that paused will see its answer on the next pass.
+    pub fn respond(&mut self, responses: &[crate::interrupt::InterruptResponse]) -> usize {
+        self.interrupts.respond(responses)
+    }
+
+    /// Interrupts currently awaiting an answer.
+    pub fn pending_interrupts(&self) -> Vec<crate::interrupt::Interrupt> {
+        self.interrupts.pending()
     }
 
     /// Cancel an in-progress invocation.

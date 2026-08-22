@@ -133,7 +133,7 @@ reshape the event loop, so they land before Phase 3 depends on them.
 | | Item | Upstream | Notes |
 |---|------|----------|-------|
 | `[ ]` | **Middleware / stage system** | v1.44 → v1.52 | Land the **v1.52 final shape only**: `_middleware/{registry,stages,types}` with `InvokeModelStage`, `ExecuteToolStage`, `AgentStreamStage`. Introduced v1.44, reworked v1.46 (result handling, model-state isolation, system-prompt fidelity), v1.50, v1.51, v1.52. Replaying costs 4× and converges on the same place. |
-| `[ ]` | **Interrupts** | pre-existing + v1.50, v1.51 | `interrupt.py`, `types/interrupt.py`. Pause/resume mid-tool with a caller round-trip. Prerequisite for checkpointing and for the graph/swarm resume fixes. v1.50 adds middleware-initiated interrupts; v1.51 adds per-call MCP tool cancellation and A2A round-trip. |
+| `[x]` | **Interrupts** | pre-existing + v1.50, v1.51 | `interrupt.py`, `types/interrupt.py`. Pause/resume mid-tool with a caller round-trip. Prerequisite for checkpointing and for the graph/swarm resume fixes. v1.50 adds middleware-initiated interrupts; v1.51 adds per-call MCP tool cancellation and A2A round-trip. |
 | `[ ]` | **Checkpointing** | v1.43 `feat(checkpoint): wire checkpointing into agent event loop` | `experimental/checkpoint/`. Depends on interrupts + snapshot sessions. |
 | `[ ]` | **Model routing + fallback** | v1.51, v1.52 | `models/routing/{router,strategy,fallback_strategy}`. `ModelRouter` accepted via `Agent(model=)`; per-call model threaded through `InvokeModelStage`. Depends on middleware. |
 | `[x]` | Structured output context | pre-existing | `tools/structured_output/_structured_output_context.py`. Pairs with the Phase 1 structured output item. |

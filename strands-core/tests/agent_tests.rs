@@ -1147,6 +1147,7 @@ async fn test_custom_tool_executor_is_used() {
             calls: &[ToolCall<'_>],
             _ctx: &ToolContext,
             _hooks: &strands_core::hooks::HookRegistry,
+            _interrupts: &mut strands_core::InterruptState,
         ) -> Vec<ContentBlock> {
             *self.used.lock().unwrap() = true;
             calls
@@ -1324,4 +1325,203 @@ async fn test_structured_output_tool_is_removed_after_a_failure_too() {
     let _: Result<Person> = agent.prompt_structured("describe Ada", person_spec()).await;
 
     assert!(!agent.tool_names().any(|n| n == "Person"));
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2 — human-in-the-loop interrupts
+// ---------------------------------------------------------------------------
+
+/// A destructive tool that records whether it was ever allowed to run.
+struct DeleteTool {
+    ran: Arc<std::sync::Mutex<bool>>,
+}
+
+#[async_trait]
+impl Tool for DeleteTool {
+    fn name(&self) -> &str {
+        "greet"
+    }
+    fn spec(&self) -> ToolSpec {
+        ToolSpec::new("greet", "deletes something", json!({"type": "object"}))
+    }
+    async fn invoke(&self, _input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolOutput> {
+        *self.ran.lock().unwrap() = true;
+        Ok(ToolOutput::success(json!("deleted")))
+    }
+}
+
+/// Approval hook: pauses the first time, then acts on the human's answer.
+fn approval_hook() -> impl strands_core::hooks::Hook {
+    use strands_core::hooks::events::BeforeToolCallEvent;
+    use strands_core::hooks::HookEvent;
+
+    |event: &mut HookEvent| {
+        if let HookEvent::BeforeToolCall(e) = event {
+            match e.interrupt("approve_delete", Some(json!("Delete this?"))) {
+                // No answer yet — refuse to act. This is the safety property.
+                None => e.cancel = true,
+                Some(answer) => {
+                    if answer.as_str() != Some("yes") {
+                        e.cancel = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Requests the tool until the conversation contains a tool result, then stops.
+///
+/// Decides from the history rather than a call counter, so it behaves the same
+/// on a resumed invocation as on the first one.
+struct ToolUntilAnsweredModel;
+
+#[async_trait]
+impl Model for ToolUntilAnsweredModel {
+    async fn stream(
+        &self,
+        messages: &[Message],
+        _system_prompt: Option<&SystemPrompt>,
+        _tool_specs: &[ToolSpec],
+    ) -> Result<ModelStream> {
+        let already_ran = messages.iter().any(|m| {
+            m.content.iter().any(|b| {
+                matches!(
+                    b,
+                    ContentBlock::ToolResult { status, .. }
+                        if *status == strands_core::types::content::ToolResultStatus::Success
+                )
+            })
+        });
+
+        if already_ran {
+            return Ok(Box::pin(stream::iter(vec![Ok(StreamEvent::MessageStop {
+                stop_reason: StopReason::EndTurn,
+            })])));
+        }
+
+        let events = vec![
+            Ok(StreamEvent::ContentBlockStart {
+                index: 0,
+                content_type: ContentBlockType::ToolUse {
+                    tool_use_id: "call_1".to_string(),
+                    name: "greet".to_string(),
+                    reasoning_signature: None,
+                },
+            }),
+            Ok(StreamEvent::ContentBlockDelta {
+                index: 0,
+                delta: DeltaContent::ToolInputDelta(r#"{"key":"X"}"#.to_string()),
+            }),
+            Ok(StreamEvent::ContentBlockStop { index: 0 }),
+            Ok(StreamEvent::MessageStop {
+                stop_reason: StopReason::ToolUse,
+            }),
+        ];
+        Ok(Box::pin(stream::iter(events)))
+    }
+}
+
+fn interrupt_agent(ran: Arc<std::sync::Mutex<bool>>) -> Agent {
+    Agent::builder()
+        .model(ToolUntilAnsweredModel)
+        .tool(DeleteTool { ran })
+        .hook(approval_hook())
+        .max_cycles(10)
+        .build()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn test_interrupt_pauses_the_run_without_acting() {
+    let ran = Arc::new(std::sync::Mutex::new(false));
+    let mut agent = interrupt_agent(ran.clone());
+
+    let result = agent.prompt("delete key X").await.unwrap();
+
+    assert_eq!(result.stop_reason, StopReason::Interrupt);
+    assert!(result.is_interrupted());
+    assert_eq!(result.interrupts.len(), 1);
+    assert_eq!(result.interrupts[0].name, "approve_delete");
+    assert_eq!(result.interrupts[0].reason, Some(json!("Delete this?")));
+    assert!(
+        !*ran.lock().unwrap(),
+        "the tool must not run while approval is outstanding"
+    );
+}
+
+#[tokio::test]
+async fn test_interrupt_resumes_and_acts_on_approval() {
+    use strands_core::InterruptResponse;
+
+    let ran = Arc::new(std::sync::Mutex::new(false));
+    let mut agent = interrupt_agent(ran.clone());
+
+    let paused = agent.prompt("delete key X").await.unwrap();
+    let id = paused.interrupts[0].id.clone();
+
+    assert_eq!(agent.respond(&[InterruptResponse::new(id, "yes")]), 1);
+
+    let resumed = agent.prompt("continue").await.unwrap();
+
+    assert_ne!(resumed.stop_reason, StopReason::Interrupt);
+    assert!(
+        *ran.lock().unwrap(),
+        "the tool should run once approval is granted"
+    );
+}
+
+#[tokio::test]
+async fn test_interrupt_denial_keeps_the_tool_cancelled() {
+    use strands_core::InterruptResponse;
+
+    let ran = Arc::new(std::sync::Mutex::new(false));
+    let mut agent = interrupt_agent(ran.clone());
+
+    let paused = agent.prompt("delete key X").await.unwrap();
+    let id = paused.interrupts[0].id.clone();
+
+    agent.respond(&[InterruptResponse::new(id, "no")]);
+
+    // A denied tool keeps this model retrying, so the run ends on the cycle
+    // cap rather than cleanly. What matters is that the denial holds for every
+    // one of those attempts.
+    let outcome = agent.prompt("continue").await;
+    assert!(
+        matches!(outcome, Err(StrandsError::MaxCycles(_))) || outcome.is_ok(),
+        "unexpected outcome: {outcome:?}"
+    );
+    assert!(
+        !*ran.lock().unwrap(),
+        "a denied approval must block the tool on every retry"
+    );
+}
+
+#[tokio::test]
+async fn test_interrupt_leaves_history_valid_for_resume() {
+    let ran = Arc::new(std::sync::Mutex::new(false));
+    let mut agent = interrupt_agent(ran);
+
+    agent.prompt("delete key X").await.unwrap();
+
+    // Pausing mid-batch would leave a ToolUse with no ToolResult, which the
+    // provider rejects on the resuming call.
+    let last = agent.messages().last().expect("history non-empty");
+    assert!(
+        !last.has_tool_use(),
+        "history must not end on an unanswered tool call: {last:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_completed_run_does_not_leave_a_stale_interrupt() {
+    let mut agent = Agent::builder()
+        .model(MockTextModel {
+            response: "hi".to_string(),
+        })
+        .build()
+        .unwrap();
+
+    agent.prompt("hello").await.unwrap();
+    assert!(agent.pending_interrupts().is_empty());
 }

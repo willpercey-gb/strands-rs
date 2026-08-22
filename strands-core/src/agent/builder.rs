@@ -208,6 +208,7 @@ impl AgentBuilder {
                 .tool_executor
                 .unwrap_or_else(|| Box::new(SequentialToolExecutor)),
             limits: self.limits,
+            interrupts: crate::interrupt::InterruptState::new(),
             invocation_state: serde_json::Value::Object(serde_json::Map::new()),
             state: AgentState::new(),
             name: self.name,

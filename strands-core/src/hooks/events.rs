@@ -112,6 +112,22 @@ pub struct BeforeToolCallEvent {
     pub input: Value,
     /// Set to `true` to cancel this tool execution.
     pub cancel: bool,
+    /// Interrupts raised and answered during this invocation.
+    ///
+    /// Call [`interrupt`](Self::interrupt) to pause for human input.
+    pub interrupts: crate::interrupt::InterruptState,
+}
+
+impl BeforeToolCallEvent {
+    /// Pause for human input, or collect the answer if one was supplied.
+    ///
+    /// Returns `None` on the first pass — the hook must then decline to
+    /// approve whatever it was asking about, typically by setting
+    /// [`cancel`](Self::cancel). It returns the answer once the caller has
+    /// responded and re-invoked.
+    pub fn interrupt(&mut self, name: &str, reason: Option<Value>) -> Option<Value> {
+        self.interrupts.interrupt(name, reason)
+    }
 }
 
 #[derive(Debug)]
