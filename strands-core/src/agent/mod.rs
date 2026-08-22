@@ -1,5 +1,6 @@
 use crate::types::content::SystemPrompt;
 mod builder;
+pub mod checkpoint;
 pub mod limits;
 pub mod state;
 pub mod callback;
@@ -9,6 +10,7 @@ mod result;
 pub use builder::AgentBuilder;
 pub use callback::CallbackHandler;
 pub use event_loop::RetryConfig;
+pub use checkpoint::{Checkpointer, CheckpointPolicy};
 pub use limits::Limits;
 pub use state::AgentState;
 pub use result::AgentResult;
