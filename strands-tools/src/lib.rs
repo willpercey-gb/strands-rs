@@ -12,6 +12,8 @@
 pub mod file_editor;
 #[cfg(feature = "http")]
 pub mod http_request;
+#[cfg(feature = "sandbox")]
+pub mod sandbox;
 #[cfg(feature = "shell")]
 pub mod shell;
 #[cfg(feature = "sleep")]
@@ -23,6 +25,8 @@ pub mod stop;
 pub use file_editor::FileEditorTool;
 #[cfg(feature = "http")]
 pub use http_request::HttpRequestTool;
+#[cfg(feature = "sandbox")]
+pub use sandbox::{Command, CommandOutput, DockerSandbox, LocalEnvironment, Sandbox};
 #[cfg(feature = "shell")]
 pub use shell::ShellTool;
 #[cfg(feature = "sleep")]

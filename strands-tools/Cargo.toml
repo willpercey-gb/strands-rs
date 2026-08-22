@@ -16,7 +16,8 @@ tracing = "0.1"
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"], optional = true }
 
 [features]
-default = ["shell", "file-editor", "sleep", "stop"]
+default = ["shell", "file-editor", "sleep", "stop", "sandbox"]
+sandbox = []
 shell = []
 file-editor = []
 sleep = []
