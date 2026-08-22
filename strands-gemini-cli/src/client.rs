@@ -214,7 +214,7 @@ impl Model for GeminiCliModel {
                     use tokio::io::AsyncReadExt;
                     let _ = stderr.read_to_string(&mut err_buf).await;
                 }
-                Err(strands_core::classify_cli_failure(format!(
+                Err(strands_core::classify_provider_failure(format!(
                     "gemini exited with status {status}: {err_buf}"
                 )))?;
             }

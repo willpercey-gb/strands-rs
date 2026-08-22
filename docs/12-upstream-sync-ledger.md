@@ -122,7 +122,7 @@ Items that touch subsystems strands-rs already has.
 |---|------|----------|-------|
 | `[x]` | `Limits` on invoke/stream | v1.42 `feat: add Limits and support it during invoke/stream` | Supersedes the bare `max_cycles: usize`. |
 | `[ ]` | Per-invocation idempotency token | v1.45 `feat: added per-invocation idempotency support` | Plus v1.49 `fix(agent): stop idempotency waiters from blocking thread-pool workers`. |
-| `[ ]` | Configurable retry exceptions | v1.50 `feat(py): configurable retry exceptions` | Generalises the existing `classify_cli_failure` / `StrandsError::Quota` short-circuit. |
+| `[x]` | Configurable retry exceptions | v1.50 `feat(py): configurable retry exceptions` | Generalises the existing `classify_cli_failure` / `StrandsError::Quota` short-circuit. |
 | `[x]` | Agent state as a typed store | pre-existing `agent/state.py`, never ported | strands-rs uses a bare `HashMap<String, Value>`. |
 
 ## Phase 2 — Core architecture
@@ -164,9 +164,9 @@ Fixes against subsystems strands-rs has, not already covered above.
 
 | | Item | Upstream |
 |---|------|----------|
-| `[ ]` | Ollama: generate unique `toolUseId` instead of reusing tool name | v1.38 `fix(ollama)` |
+| `[x]` | Ollama: generate unique `toolUseId` instead of reusing tool name | v1.38 `fix(ollama)` |
 | `[ ]` | Ollama: avoid crash on empty model stream | v1.46 `fix(ollama)` |
-| `[ ]` | Ollama/llama/mistral/writer: raise context-window-overflow error | v1.42 `fix(models)` |
+| `[x]` | Ollama/llama/mistral/writer: raise context-window-overflow error | v1.42 `fix(models)` |
 | `[x]` | Streaming: warn when tool input JSON is malformed | v1.49 `fix(streaming)` — strands-rs currently swallows this with `unwrap_or(default)` |
 | `[ ]` | Streaming: handle tool use metadata in `contentBlockDelta` for non-standard models | v1.44 `fix(streaming)` |
 | `[ ]` | Preserve non-ASCII text in tool-result / tool-call serialization | v1.47, v1.48 `fix(core)` ×2 |

@@ -1765,3 +1765,134 @@ async fn test_telemetry_records_cycles_and_tool_calls() {
     assert_eq!(collector.snapshot().total_tool_calls(), 1);
     assert_eq!(collector.snapshot().total_tool_errors(), 0);
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4 — context-window overflow recovery
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_context_overflow_is_recovered_by_reducing() {
+    use std::sync::Mutex;
+    use strands_core::conversation::{ConversationManager, ReduceContext};
+
+    /// Fails the first call with an overflow, then succeeds.
+    struct OverflowOnceModel {
+        calls: Arc<AtomicUsize>,
+    }
+
+    #[async_trait]
+    impl Model for OverflowOnceModel {
+        async fn stream(
+            &self,
+            _messages: &[Message],
+            _system_prompt: Option<&SystemPrompt>,
+            _tool_specs: &[ToolSpec],
+        ) -> Result<ModelStream> {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                return Err(strands_core::error::classify_provider_failure(
+                    "This model's maximum context length is 8192 tokens",
+                ));
+            }
+            let events = vec![
+                Ok(StreamEvent::ContentBlockStart {
+                    index: 0,
+                    content_type: ContentBlockType::Text,
+                }),
+                Ok(StreamEvent::ContentBlockDelta {
+                    index: 0,
+                    delta: DeltaContent::TextDelta("recovered".to_string()),
+                }),
+                Ok(StreamEvent::ContentBlockStop { index: 0 }),
+                Ok(StreamEvent::MessageStop {
+                    stop_reason: StopReason::EndTurn,
+                }),
+            ];
+            Ok(Box::pin(stream::iter(events)))
+        }
+    }
+
+    /// Records whether it was asked to recover from an overflow.
+    struct RecordingManager {
+        overflow_calls: Arc<Mutex<usize>>,
+    }
+
+    #[async_trait]
+    impl ConversationManager for RecordingManager {
+        async fn reduce_context(
+            &self,
+            messages: &mut Vec<Message>,
+            ctx: ReduceContext<'_>,
+        ) -> Result<()> {
+            if ctx.overflow {
+                *self.overflow_calls.lock().unwrap() += 1;
+                messages.clear();
+            }
+            Ok(())
+        }
+    }
+
+    let overflow_calls = Arc::new(Mutex::new(0));
+    let calls = Arc::new(AtomicUsize::new(0));
+
+    let mut agent = Agent::builder()
+        .model(OverflowOnceModel {
+            calls: calls.clone(),
+        })
+        .conversation_manager(RecordingManager {
+            overflow_calls: overflow_calls.clone(),
+        })
+        .retry_config(RetryConfig {
+            max_retries: 0,
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    let result = agent.prompt("a very long prompt").await.unwrap();
+
+    assert_eq!(result.text(), "recovered");
+    assert_eq!(
+        *overflow_calls.lock().unwrap(),
+        1,
+        "the manager must be told to recover from the overflow"
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn test_a_persistent_overflow_surfaces_rather_than_looping() {
+    use strands_core::conversation::NullConversationManager;
+
+    struct AlwaysOverflowModel;
+
+    #[async_trait]
+    impl Model for AlwaysOverflowModel {
+        async fn stream(
+            &self,
+            _messages: &[Message],
+            _system_prompt: Option<&SystemPrompt>,
+            _tool_specs: &[ToolSpec],
+        ) -> Result<ModelStream> {
+            Err(strands_core::error::classify_provider_failure(
+                "prompt is too long",
+            ))
+        }
+    }
+
+    let mut agent = Agent::builder()
+        .model(AlwaysOverflowModel)
+        .conversation_manager(NullConversationManager)
+        .retry_config(RetryConfig {
+            max_retries: 0,
+            ..Default::default()
+        })
+        .build()
+        .unwrap();
+
+    // A manager that cannot reduce must not send the loop round forever.
+    let result = agent.prompt("hello").await;
+    assert!(
+        matches!(result, Err(StrandsError::ContextWindowOverflow(_))),
+        "got {result:?}"
+    );
+}

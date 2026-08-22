@@ -249,6 +249,7 @@ pub(crate) async fn run_loop(
     let mut last_assistant_message = None::<Message>;
     let mut cycle = 0;
     let mut hook_retries = 0usize;
+    let mut overflow_recovered = false;
 
     // BeforeInvocation — hooks can override messages
     let mut before_event = HookEvent::BeforeInvocation(BeforeInvocationEvent {
@@ -314,7 +315,10 @@ pub(crate) async fn run_loop(
             .await?;
 
         // Model call with retry loop
-        let outcome = call_model_with_retry(
+        // A context-window overflow is recoverable: reduce and try once more.
+        // Without this the manager's overflow path is unreachable, and the
+        // invocation fails on something trimming would have fixed.
+        let outcome = match call_model_with_retry(
             &model,
             messages,
             system_prompt,
@@ -326,7 +330,35 @@ pub(crate) async fn run_loop(
             retry_config,
             model_middleware,
         )
-        .await?;
+        .await
+        {
+            Err(e) if e.is_context_overflow() && !overflow_recovered => {
+                debug!(error = %e, "Context overflow; reducing and retrying once");
+                overflow_recovered = true;
+                conversation_manager
+                    .reduce_context(messages, ReduceContext::overflow(system_prompt))
+                    .await?;
+                call_model_with_retry(
+                    &model,
+                    messages,
+                    system_prompt,
+                    &tool_specs,
+                    hooks,
+                    callback_handler,
+                    cancel,
+                    cycle,
+                    retry_config,
+                    model_middleware,
+                )
+                .await?
+            }
+            other => other?,
+        };
+
+        // A successful call means the reduced history fits; allow one more
+        // recovery if the conversation grows past the limit again later.
+        overflow_recovered = false;
+
         let crate::middleware::ModelCallOutcome {
             content: content_blocks,
             stop_reason: model_stop_reason,

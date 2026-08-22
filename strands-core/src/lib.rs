@@ -18,7 +18,7 @@ pub mod types;
 // Re-exports for convenience
 pub use agent::{Agent, AgentBuilder, AgentResult, CallbackHandler, RetryConfig};
 pub use conversation::ConversationManager;
-pub use error::{classify_cli_failure, Result, StrandsError};
+pub use error::{classify_cli_failure, classify_provider_failure, Result, StrandsError};
 pub use hooks::{Hook, HookEvent, HookRegistry};
 pub use interrupt::{Interrupt, InterruptResponse, InterruptState};
 pub use interventions::{

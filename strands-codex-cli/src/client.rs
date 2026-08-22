@@ -242,7 +242,7 @@ impl Model for CodexCliModel {
                     use tokio::io::AsyncReadExt;
                     let _ = stderr.read_to_string(&mut err_buf).await;
                 }
-                Err(strands_core::classify_cli_failure(format!(
+                Err(strands_core::classify_provider_failure(format!(
                     "codex exited with status {status}: {err_buf}"
                 )))?;
             }

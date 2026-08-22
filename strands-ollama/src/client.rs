@@ -230,7 +230,9 @@ impl Model for OllamaModel {
                 .text()
                 .await
                 .unwrap_or_else(|_| "unknown".to_string());
-            return Err(StrandsError::Model(format!(
+            // Classify so a context-window overflow reaches the conversation
+            // manager's recovery path instead of failing the invocation.
+            return Err(strands_core::error::classify_provider_failure(format!(
                 "Ollama returned {status}: {body}"
             )));
         }
