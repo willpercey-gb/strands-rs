@@ -8,8 +8,11 @@
 //!
 //! Ported from upstream `memory/`.
 
+/// Deciding what is worth remembering.
 pub mod extraction;
+/// Coordinating memory across a run.
 pub mod manager;
+/// Where remembered facts live.
 pub mod store;
 
 pub use extraction::{ExtractionConfig, ExtractionTrigger, MemoryExtractor};

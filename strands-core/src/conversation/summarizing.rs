@@ -4,10 +4,10 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use tracing::debug;
 
-use crate::types::content::SystemPrompt;
 use crate::error::StrandsError;
 use crate::model::Model;
 use crate::types::content::ContentBlock;
+use crate::types::content::SystemPrompt;
 use crate::types::message::{Message, Role};
 use crate::types::streaming::{DeltaContent, StreamEvent};
 
@@ -34,6 +34,7 @@ pub struct SummarizingConversationManager {
 }
 
 impl SummarizingConversationManager {
+    /// Create a new instance.
     pub fn new(model: Arc<dyn Model>) -> Self {
         Self {
             window_size: 40,
@@ -49,21 +50,25 @@ impl SummarizingConversationManager {
     ///
     /// Requires a model that reports a context window limit; where none is
     /// known, only the message-count trigger applies.
+    /// Set the proactive compression.
     pub fn with_proactive_compression(mut self, threshold: f64) -> Self {
         self.proactive = Some(ProactiveCompression::new(threshold));
         self
     }
 
+    /// Set the window size.
     pub fn with_window_size(mut self, size: usize) -> Self {
         self.window_size = size;
         self
     }
 
+    /// Set the preserve recent.
     pub fn with_preserve_recent(mut self, count: usize) -> Self {
         self.preserve_recent = count;
         self
     }
 
+    /// Set the summary ratio.
     pub fn with_summary_ratio(mut self, ratio: f32) -> Self {
         self.summary_ratio = ratio.clamp(0.0, 1.0);
         self
@@ -189,7 +194,10 @@ impl ConversationManager for SummarizingConversationManager {
 
         *messages = new_messages;
 
-        debug!(new_len = messages.len(), "Context reduced via summarization");
+        debug!(
+            new_len = messages.len(),
+            "Context reduced via summarization"
+        );
         Ok(())
     }
 

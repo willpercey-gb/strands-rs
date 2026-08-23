@@ -1,4 +1,5 @@
 pub mod executor;
+/// Schema-constrained final answers.
 pub mod structured_output;
 
 use async_trait::async_trait;
@@ -20,11 +21,14 @@ pub struct ToolContext {
 /// The result of executing a tool.
 #[derive(Debug, Clone)]
 pub struct ToolOutput {
+    /// What the tool produced.
     pub content: Value,
+    /// Whether this represents a failure. Surfaced to the model either way.
     pub is_error: bool,
 }
 
 impl ToolOutput {
+    /// A successful result.
     pub fn success(content: impl Into<Value>) -> Self {
         Self {
             content: content.into(),
@@ -32,6 +36,7 @@ impl ToolOutput {
         }
     }
 
+    /// A failed result the model can read and react to.
     pub fn error(message: impl Into<String>) -> Self {
         Self {
             content: Value::String(message.into()),
@@ -40,9 +45,7 @@ impl ToolOutput {
     }
 }
 
-pub use executor::{
-    ConcurrentToolExecutor, SequentialToolExecutor, ToolCall, ToolExecutor,
-};
+pub use executor::{ConcurrentToolExecutor, SequentialToolExecutor, ToolCall, ToolExecutor};
 pub use structured_output::{
     StructuredOutputSlot, StructuredOutputSpec, StructuredOutputTool,
     DEFAULT_STRUCTURED_OUTPUT_PROMPT,
@@ -66,8 +69,9 @@ pub trait Tool: Send + Sync {
 // ---------------------------------------------------------------------------
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type InvokeFn =
-    Arc<dyn Fn(Value, &ToolContext) -> BoxFuture<'_, Result<ToolOutput, StrandsError>> + Send + Sync>;
+type InvokeFn = Arc<
+    dyn Fn(Value, &ToolContext) -> BoxFuture<'_, Result<ToolOutput, StrandsError>> + Send + Sync,
+>;
 
 /// A tool backed by a closure. Convenient for simple tools that don't need
 /// their own struct.
@@ -77,6 +81,7 @@ pub struct FnTool {
 }
 
 impl FnTool {
+    /// Create a new instance.
     pub fn new<F, Fut>(name: &str, description: &str, input_schema: Value, f: F) -> Self
     where
         F: Fn(Value, &ToolContext) -> Fut + Send + Sync + 'static,
@@ -103,6 +108,7 @@ impl std::fmt::Debug for FnTool {
 
 #[async_trait]
 impl Tool for FnTool {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         &self.tool_spec.name
     }

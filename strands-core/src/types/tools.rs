@@ -4,8 +4,11 @@ use serde_json::Value;
 /// Schema describing a tool's capabilities and input shape.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolSpec {
+    /// Unique name the model calls this tool by.
     pub name: String,
+    /// What the tool does. The model chooses from this, so it matters.
     pub description: String,
+    /// JSON Schema for the arguments.
     pub input_schema: Value,
     /// Optional JSON Schema for the tool's output.
     ///
@@ -42,11 +45,15 @@ impl ToolSpec {
         }
     }
 
+    /// Declare a schema for the tool's output.
+    /// Set the output schema.
     pub fn with_output_schema(mut self, schema: Value) -> Self {
         self.output_schema = Some(schema);
         self
     }
 
+    /// Attach behavioural hints.
+    /// Set the annotations.
     pub fn with_annotations(mut self, annotations: ToolAnnotations) -> Self {
         self.annotations = Some(annotations);
         self
@@ -139,17 +146,24 @@ mod tests {
 /// Configuration for how the model should select tools.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolConfig {
+    /// How the model should pick among the available tools.
     pub tool_choice: ToolChoice,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type")]
+/// How the model should select a tool.
 pub enum ToolChoice {
+    /// The model decides whether and which tool to call.
     #[default]
     Auto,
+    /// The model must call some tool.
     Any,
+    /// The model must not call a tool.
     None,
+    /// The model must call this specific tool.
     Specific {
+        /// Name of the required tool.
         name: String,
     },
 }

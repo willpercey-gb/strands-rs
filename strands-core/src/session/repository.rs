@@ -9,16 +9,22 @@ use super::SessionManager;
 /// Stored session metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionRecord {
+    /// Identifier for the session.
     pub session_id: String,
+    /// RFC 3339 creation time.
     pub created_at: String,
+    /// RFC 3339 time of the last write.
     pub updated_at: String,
 }
 
 /// Stored agent state within a session.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AgentRecord {
+    /// Identifier for the agent within the session.
     pub agent_id: String,
+    /// Session this agent belongs to.
     pub session_id: String,
+    /// Conversation-manager bookkeeping, when the manager keeps any.
     pub conversation_manager_state: Option<serde_json::Value>,
 }
 
@@ -34,10 +40,7 @@ pub trait SessionRepository: Send + Sync {
     async fn save_session(&self, record: &SessionRecord) -> Result<(), StrandsError>;
 
     /// Load session metadata.
-    async fn load_session(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<SessionRecord>, StrandsError>;
+    async fn load_session(&self, session_id: &str) -> Result<Option<SessionRecord>, StrandsError>;
 
     /// Delete a session and all its data.
     async fn delete_session(&self, session_id: &str) -> Result<(), StrandsError>;
@@ -69,11 +72,7 @@ pub trait SessionRepository: Send + Sync {
     ) -> Result<Vec<Message>, StrandsError>;
 
     /// Delete all messages for an agent within a session.
-    async fn delete_messages(
-        &self,
-        session_id: &str,
-        agent_id: &str,
-    ) -> Result<(), StrandsError>;
+    async fn delete_messages(&self, session_id: &str, agent_id: &str) -> Result<(), StrandsError>;
 }
 
 /// Session manager backed by a [`SessionRepository`].
@@ -87,6 +86,7 @@ pub struct RepositorySessionManager {
 }
 
 impl RepositorySessionManager {
+    /// Create a new instance.
     pub fn new(repository: impl SessionRepository + 'static, agent_id: impl Into<String>) -> Self {
         Self {
             repository: Box::new(repository),
@@ -97,11 +97,7 @@ impl RepositorySessionManager {
 
 #[async_trait]
 impl SessionManager for RepositorySessionManager {
-    async fn save(
-        &self,
-        session_id: &str,
-        messages: &[Message],
-    ) -> Result<(), StrandsError> {
+    async fn save(&self, session_id: &str, messages: &[Message]) -> Result<(), StrandsError> {
         let now = chrono::Utc::now().to_rfc3339();
 
         // Upsert session metadata
@@ -133,10 +129,7 @@ impl SessionManager for RepositorySessionManager {
         Ok(())
     }
 
-    async fn load(
-        &self,
-        session_id: &str,
-    ) -> Result<Option<Vec<Message>>, StrandsError> {
+    async fn load(&self, session_id: &str) -> Result<Option<Vec<Message>>, StrandsError> {
         let session = self.repository.load_session(session_id).await?;
         if session.is_none() {
             return Ok(None);

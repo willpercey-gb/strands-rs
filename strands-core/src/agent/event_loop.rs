@@ -137,7 +137,10 @@ impl StreamAccumulator {
                 }
                 DeltaContent::ReasoningDelta(text) => {
                     let reasoning = self.active_reasoning.get_or_insert_with(Default::default);
-                    reasoning.text.get_or_insert_with(String::new).push_str(text);
+                    reasoning
+                        .text
+                        .get_or_insert_with(String::new)
+                        .push_str(text);
                 }
                 DeltaContent::ReasoningSignature(signature) => {
                     // Some providers deliver the signature as its own delta
@@ -490,10 +493,7 @@ pub(crate) async fn run_loop(
                         tool_use_id,
                         status,
                         ..
-                    } => Some((
-                        tool_use_id.clone(),
-                        *status == ToolResultStatus::Error,
-                    )),
+                    } => Some((tool_use_id.clone(), *status == ToolResultStatus::Error)),
                     _ => None,
                 })
                 .collect(),
@@ -562,7 +562,8 @@ struct ModelCallTerminal<'a> {
     cancel: &'a Arc<AtomicBool>,
 }
 
-impl crate::middleware::Terminal<
+impl
+    crate::middleware::Terminal<
         crate::middleware::InvokeModelContext,
         crate::middleware::stages::InvokeModelResult,
     > for ModelCallTerminal<'_>
@@ -701,4 +702,3 @@ async fn try_model_call(
         metrics,
     })
 }
-

@@ -1,19 +1,33 @@
+//! The agent and its loop.
+//!
+//! [`Agent`] owns the model, the tool set, the conversation, and the policy
+//! objects that shape a run — a [`ConversationManager`],
+//! hooks, middleware, [`Limits`] and an optional session manager. Build one with
+//! [`Agent::builder`].
+
 use crate::types::content::SystemPrompt;
+/// Fluent construction of an [`Agent`].
 mod builder;
-pub mod checkpoint;
-pub mod limits;
-pub mod state;
+/// Real-time streaming callbacks.
 pub mod callback;
+/// Durable snapshots at turn boundaries.
+pub mod checkpoint;
+/// The ReAct loop itself.
 mod event_loop;
+/// Per-invocation budget caps.
+pub mod limits;
+/// What an invocation produced.
 mod result;
+/// Durable per-agent key/value state.
+pub mod state;
 
 pub use builder::AgentBuilder;
 pub use callback::CallbackHandler;
+pub use checkpoint::{CheckpointPolicy, Checkpointer};
 pub use event_loop::RetryConfig;
-pub use checkpoint::{Checkpointer, CheckpointPolicy};
 pub use limits::Limits;
-pub use state::AgentState;
 pub use result::AgentResult;
+pub use state::AgentState;
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,9 +39,9 @@ use crate::hooks::HookRegistry;
 use crate::model::Model;
 use crate::session::SessionManager;
 use crate::tool::{Tool, ToolContext, ToolOutput};
-use tracing::debug;
 use crate::types::message::Message;
 use crate::types::tools::ToolSpec;
+use tracing::debug;
 
 /// The core agent. Orchestrates model calls, tool execution,
 /// and conversation management in a ReAct loop.
@@ -238,11 +252,7 @@ impl Agent {
     }
 
     /// Wrap this agent as a tool for use by another agent.
-    pub fn as_tool(
-        self,
-        name: impl Into<String>,
-        description: impl Into<String>,
-    ) -> AgentTool {
+    pub fn as_tool(self, name: impl Into<String>, description: impl Into<String>) -> AgentTool {
         AgentTool {
             name: name.into(),
             description: description.into(),
@@ -284,11 +294,13 @@ pub struct AgentTool {
 
 impl AgentTool {
     /// Hand the sub-agent the caller's conversation before prompting it.
+    /// Set the shared context.
     pub fn with_shared_context(mut self) -> Self {
         self.mode = DelegationMode::SharedContext;
         self
     }
 
+    /// The configured delegation mode.
     pub fn mode(&self) -> DelegationMode {
         self.mode
     }
@@ -305,6 +317,7 @@ impl AgentTool {
 
 #[async_trait::async_trait]
 impl Tool for AgentTool {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         &self.name
     }
@@ -331,12 +344,10 @@ impl Tool for AgentTool {
         input: serde_json::Value,
         _ctx: &ToolContext,
     ) -> crate::Result<ToolOutput> {
-        let prompt = input["prompt"]
-            .as_str()
-            .ok_or_else(|| StrandsError::Tool {
-                tool_name: self.name.clone(),
-                message: "Missing 'prompt' field".into(),
-            })?;
+        let prompt = input["prompt"].as_str().ok_or_else(|| StrandsError::Tool {
+            tool_name: self.name.clone(),
+            message: "Missing 'prompt' field".into(),
+        })?;
 
         let mut agent = self.agent.lock().await;
         let result = agent.prompt(prompt).await?;
@@ -368,9 +379,11 @@ mod tests {
             _system_prompt: Option<&SystemPrompt>,
             _tool_specs: &[ToolSpec],
         ) -> Result<crate::model::ModelStream, StrandsError> {
-            let s = stream::iter(vec![Ok::<StreamEvent, StrandsError>(StreamEvent::MessageStop {
-                stop_reason: crate::types::streaming::StopReason::EndTurn,
-            })]);
+            let s = stream::iter(vec![Ok::<StreamEvent, StrandsError>(
+                StreamEvent::MessageStop {
+                    stop_reason: crate::types::streaming::StopReason::EndTurn,
+                },
+            )]);
             Ok(Box::pin(s))
         }
     }

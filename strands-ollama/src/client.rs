@@ -1,11 +1,13 @@
-use strands_core::types::content::SystemPrompt;
 use async_trait::async_trait;
 use futures::stream;
 use futures::TryStreamExt;
 use reqwest::Client;
 use strands_core::model::{Model, ModelStream};
+use strands_core::types::content::SystemPrompt;
 use strands_core::types::message::{Message, Role};
-use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
+use strands_core::types::streaming::{
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
+};
 use strands_core::types::tools::ToolSpec;
 use strands_core::{ContentBlock, StrandsError};
 use tracing::debug;
@@ -149,14 +151,12 @@ impl OllamaModel {
                         .content
                         .iter()
                         .filter_map(|b| match b {
-                            ContentBlock::ToolUse { name, input, .. } => {
-                                Some(OllamaToolCall {
-                                    function: OllamaFunctionCall {
-                                        name: name.clone(),
-                                        arguments: input.clone(),
-                                    },
-                                })
-                            }
+                            ContentBlock::ToolUse { name, input, .. } => Some(OllamaToolCall {
+                                function: OllamaFunctionCall {
+                                    name: name.clone(),
+                                    arguments: input.clone(),
+                                },
+                            }),
                             _ => None,
                         })
                         .collect();
@@ -191,7 +191,6 @@ impl OllamaModel {
             })
             .collect()
     }
-
 }
 
 #[async_trait]
@@ -315,9 +314,7 @@ impl Model for OllamaModel {
                 index: block_index,
                 delta: DeltaContent::TextDelta(accumulated_text),
             }));
-            all_events.push(Ok(StreamEvent::ContentBlockStop {
-                index: block_index,
-            }));
+            all_events.push(Ok(StreamEvent::ContentBlockStop { index: block_index }));
             block_index += 1;
         }
 
@@ -342,9 +339,7 @@ impl Model for OllamaModel {
                         index: block_index,
                         delta: DeltaContent::ToolInputDelta(input_json),
                     }));
-                    all_events.push(Ok(StreamEvent::ContentBlockStop {
-                        index: block_index,
-                    }));
+                    all_events.push(Ok(StreamEvent::ContentBlockStop { index: block_index }));
                     block_index += 1;
                 }
             }

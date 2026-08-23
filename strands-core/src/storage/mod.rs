@@ -11,7 +11,9 @@
 //!
 //! Ported from upstream `storage/`.
 
+/// Filesystem-backed storage.
 pub mod local_file;
+/// In-process storage.
 pub mod memory;
 
 use async_trait::async_trait;

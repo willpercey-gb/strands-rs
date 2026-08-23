@@ -41,6 +41,7 @@ impl ExtractionTrigger {
 /// How extraction behaves for a store.
 #[derive(Debug, Clone)]
 pub struct ExtractionConfig {
+    /// When extraction runs.
     pub trigger: ExtractionTrigger,
     /// Only extract from these roles.
     ///
@@ -60,11 +61,13 @@ impl Default for ExtractionConfig {
 }
 
 impl ExtractionConfig {
+    /// Set the trigger.
     pub fn with_trigger(mut self, trigger: ExtractionTrigger) -> Self {
         self.trigger = trigger;
         self
     }
 
+    /// Set the roles.
     pub fn with_roles(mut self, roles: Vec<Role>) -> Self {
         self.roles = roles;
         self
@@ -82,6 +85,7 @@ impl ExtractionConfig {
 /// Turns conversation messages into records worth storing.
 #[async_trait]
 pub trait MemoryExtractor: Send + Sync {
+    /// Turn eligible messages into records worth storing.
     async fn extract(&self, messages: &[&Message]) -> Result<Vec<MemoryRecord>, StrandsError>;
 }
 
@@ -97,9 +101,7 @@ impl MemoryExtractor for VerbatimExtractor {
     async fn extract(&self, messages: &[&Message]) -> Result<Vec<MemoryRecord>, StrandsError> {
         Ok(messages
             .iter()
-            .map(|m| {
-                MemoryRecord::new(m.text()).with_metadata("role", format!("{:?}", m.role))
-            })
+            .map(|m| MemoryRecord::new(m.text()).with_metadata("role", format!("{:?}", m.role)))
             .collect())
     }
 }
@@ -112,7 +114,10 @@ mod tests {
     fn every_invocation_fires_on_any_new_message() {
         let t = ExtractionTrigger::EveryInvocation;
         assert!(t.should_extract(1));
-        assert!(!t.should_extract(0), "an empty batch has nothing to extract");
+        assert!(
+            !t.should_extract(0),
+            "an empty batch has nothing to extract"
+        );
     }
 
     #[test]

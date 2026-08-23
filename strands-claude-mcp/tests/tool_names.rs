@@ -79,7 +79,11 @@ fn the_advertised_name_is_the_callable_name() {
         })
         .unwrap();
 
-    assert_eq!(result["is_error"], json!(false), "calling `{advertised}` failed");
+    assert_eq!(
+        result["is_error"],
+        json!(false),
+        "calling `{advertised}` failed"
+    );
     assert_eq!(result["content"]["hello"], json!("world"));
 }
 
@@ -92,13 +96,17 @@ impl Tool for Annotated {
         "annotated"
     }
     fn spec(&self) -> ToolSpec {
-        ToolSpec::new("annotated", "does something risky", json!({"type": "object"}))
-            .with_output_schema(json!({"type": "string"}))
-            .with_annotations(strands_core::types::tools::ToolAnnotations {
-                destructive_hint: Some(true),
-                read_only_hint: Some(false),
-                ..Default::default()
-            })
+        ToolSpec::new(
+            "annotated",
+            "does something risky",
+            json!({"type": "object"}),
+        )
+        .with_output_schema(json!({"type": "string"}))
+        .with_annotations(strands_core::types::tools::ToolAnnotations {
+            destructive_hint: Some(true),
+            read_only_hint: Some(false),
+            ..Default::default()
+        })
     }
     async fn invoke(&self, input: Value, _ctx: &ToolContext) -> Result<ToolOutput, StrandsError> {
         Ok(ToolOutput::success(input))

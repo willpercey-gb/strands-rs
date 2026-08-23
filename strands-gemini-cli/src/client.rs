@@ -1,5 +1,5 @@
-use strands_core::types::content::SystemPrompt;
 use std::process::Stdio;
+use strands_core::types::content::SystemPrompt;
 
 use async_stream::try_stream;
 use async_trait::async_trait;
@@ -100,11 +100,7 @@ impl GeminiCliModel {
     /// The CLI's `-y` flag bypasses every tool-call confirmation —
     /// only safe for unattended runs.
     pub fn with_yolo(mut self, on: bool) -> Self {
-        self.approval_mode = if on {
-            Some(ApprovalMode::Yolo)
-        } else {
-            None
-        };
+        self.approval_mode = if on { Some(ApprovalMode::Yolo) } else { None };
         self
     }
 

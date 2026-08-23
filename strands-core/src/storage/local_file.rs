@@ -17,6 +17,7 @@ pub struct LocalFileStorage {
 }
 
 impl LocalFileStorage {
+    /// Create a new instance.
     pub fn new(root: impl Into<PathBuf>) -> Self {
         Self { root: root.into() }
     }
@@ -198,7 +199,10 @@ mod tests {
         let s = LocalFileStorage::new(&root);
 
         s.write("deep/nested/key", b"x".to_vec()).await.unwrap();
-        assert_eq!(s.read("deep/nested/key").await.unwrap(), Some(b"x".to_vec()));
+        assert_eq!(
+            s.read("deep/nested/key").await.unwrap(),
+            Some(b"x".to_vec())
+        );
 
         let _ = tokio::fs::remove_dir_all(&root).await;
     }

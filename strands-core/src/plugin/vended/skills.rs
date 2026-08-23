@@ -17,6 +17,7 @@ use crate::types::content::{SystemContentBlock, SystemPrompt};
 /// One reusable capability.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Skill {
+    /// Short identifier for the capability.
     pub name: String,
     /// One line, used when listing skills.
     pub description: String,
@@ -25,6 +26,7 @@ pub struct Skill {
 }
 
 impl Skill {
+    /// Create a new instance.
     pub fn new(
         name: impl Into<String>,
         description: impl Into<String>,
@@ -53,28 +55,35 @@ pub struct SkillSet {
 }
 
 impl SkillSet {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the skill.
+    /// Add one skill.
     pub fn with_skill(mut self, skill: Skill) -> Self {
         self.skills.push(skill);
         self
     }
 
+    /// Add several skills at once.
     pub fn extend(mut self, skills: impl IntoIterator<Item = Skill>) -> Self {
         self.skills.extend(skills);
         self
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.skills.len()
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.skills.is_empty()
     }
 
+    /// The skills in this set.
     pub fn skills(&self) -> &[Skill] {
         &self.skills
     }
@@ -194,9 +203,9 @@ mod tests {
             panic!("expected blocks");
         };
 
-        assert!(blocks
-            .iter()
-            .any(|b| matches!(b, SystemContentBlock::CachePoint(cp) if cp.ttl.as_deref() == Some("1h"))));
+        assert!(blocks.iter().any(
+            |b| matches!(b, SystemContentBlock::CachePoint(cp) if cp.ttl.as_deref() == Some("1h"))
+        ));
     }
 
     #[test]

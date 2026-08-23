@@ -2,7 +2,9 @@
 
 use std::collections::HashMap;
 
-use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
+use strands_core::types::streaming::{
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
+};
 
 use crate::types::{StreamChunk, StreamDelta};
 
@@ -278,7 +280,9 @@ mod tests {
         }
         assert_eq!(input, "{\"city\":\"London\"}");
         assert!(matches!(
-            events.iter().find(|e| matches!(e, StreamEvent::MessageStop { .. })),
+            events
+                .iter()
+                .find(|e| matches!(e, StreamEvent::MessageStop { .. })),
             Some(StreamEvent::MessageStop {
                 stop_reason: StopReason::ToolUse
             })

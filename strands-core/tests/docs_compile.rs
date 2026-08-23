@@ -272,9 +272,7 @@ fn find_rlib(deps: &Path, crate_name: &str) -> String {
         .filter(|e| {
             let name = e.file_name().to_string_lossy().into_owned();
             name.starts_with(&prefix)
-                && (name.ends_with(".rlib")
-                    || name.ends_with(".dylib")
-                    || name.ends_with(".so"))
+                && (name.ends_with(".rlib") || name.ends_with(".dylib") || name.ends_with(".so"))
         })
         .filter_map(|e| {
             let modified = e.metadata().ok()?.modified().ok()?;

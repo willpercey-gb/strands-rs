@@ -34,6 +34,7 @@ impl Default for FileEditorTool {
 }
 
 impl FileEditorTool {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -42,11 +43,13 @@ impl FileEditorTool {
     ///
     /// Strongly recommended: without it the model can read and rewrite anything
     /// the process can.
+    /// Set the root.
     pub fn with_root(mut self, root: impl Into<PathBuf>) -> Self {
         self.root = Some(root.into());
         self
     }
 
+    /// Set the max read bytes.
     pub fn with_max_read_bytes(mut self, bytes: usize) -> Self {
         self.max_read_bytes = bytes;
         self
@@ -155,8 +158,7 @@ impl Tool for FileEditorTool {
                 debug!(?path, "Reading file");
                 match tokio::fs::read_to_string(&path).await {
                     Ok(content) if content.len() > self.max_read_bytes => {
-                        let kept: String =
-                            content.chars().take(self.max_read_bytes).collect();
+                        let kept: String = content.chars().take(self.max_read_bytes).collect();
                         Ok(ToolOutput::success(format!(
                             "{kept}\n[truncated at {} bytes]",
                             self.max_read_bytes
@@ -363,7 +365,9 @@ mod tests {
     #[tokio::test]
     async fn view_truncates_a_large_file_visibly() {
         let root = temp_root();
-        let tool = FileEditorTool::new().with_root(&root).with_max_read_bytes(10);
+        let tool = FileEditorTool::new()
+            .with_root(&root)
+            .with_max_read_bytes(10);
 
         call(
             &tool,

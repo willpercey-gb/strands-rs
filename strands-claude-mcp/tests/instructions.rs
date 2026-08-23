@@ -32,7 +32,10 @@ fn spawn(name: &str, instructions: Option<&str>) -> BridgeClient {
 
 #[test]
 fn instructions_round_trip() {
-    let client = spawn("test_instructions_set", Some("Reach for these tools when X."));
+    let client = spawn(
+        "test_instructions_set",
+        Some("Reach for these tools when X."),
+    );
     let value = client
         .call(&BridgeRequest::Instructions)
         .expect("instructions request should succeed");
@@ -79,7 +82,12 @@ fn shim_initialize_carries_instructions() {
     }
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_strands-claude-mcp-shim"))
-        .args(["--name", "test_shim_initialize", "--port", &port.to_string()])
+        .args([
+            "--name",
+            "test_shim_initialize",
+            "--port",
+            &port.to_string(),
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())

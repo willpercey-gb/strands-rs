@@ -1,6 +1,7 @@
 //! Applying interventions to tool execution.
 //!
-//! Wraps another [`ToolExecutor`], consulting an [`InterventionRegistry`]
+//! Wraps another [`ToolExecutor`](crate::tool::ToolExecutor), consulting an
+//! [`InterventionRegistry`]
 //! before each call. This is the async seam interventions need — hooks are
 //! synchronous, and a policy that has to query a service or a policy engine
 //! cannot run there.
@@ -25,6 +26,7 @@ pub struct InterventionExecutor {
 }
 
 impl InterventionExecutor {
+    /// Create a new instance.
     pub fn new(inner: impl ToolExecutor + 'static, registry: InterventionRegistry) -> Self {
         Self {
             inner: Box::new(inner),

@@ -31,11 +31,13 @@ impl Default for CachePoint {
 }
 
 impl CachePoint {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Set a retention hint, e.g. `"5m"` or `"1h"`.
+    /// Set the ttl.
     pub fn with_ttl(mut self, ttl: impl Into<String>) -> Self {
         self.ttl = Some(ttl.into());
         self
@@ -62,6 +64,7 @@ pub struct ReasoningContent {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GuardContent {
+    /// The text to evaluate.
     pub text: String,
     /// Qualifiers describing the block's role. Optional — providers treat an
     /// absent list as unqualified.
@@ -73,26 +76,44 @@ pub struct GuardContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ContentBlock {
+    /// Plain text.
     Text {
+        /// The text.
         text: String,
     },
+    /// A tool call the model is requesting.
     ToolUse {
+        /// Identifier the matching `ToolResult` must echo back.
         tool_use_id: String,
+        /// Name of the tool to invoke.
         name: String,
+        /// Arguments, matching the tool's input schema.
         input: Value,
     },
+    /// The outcome of a tool call.
     ToolResult {
+        /// Identifier of the `ToolUse` this answers.
         tool_use_id: String,
+        /// Whether the call succeeded.
         status: ToolResultStatus,
+        /// What the tool returned.
         content: Vec<ToolResultContent>,
     },
+    /// An image.
     Image(ImageContent),
+    /// A document.
     Document(DocumentContent),
+    /// Audio.
     Audio(AudioContent),
+    /// Video.
     Video(VideoContent),
+    /// Reasoning the model produced on the way to its answer.
     Reasoning(ReasoningContent),
+    /// Generated text together with the sources it cites.
     Citations(CitationsContentBlock),
+    /// Text submitted for guardrail evaluation.
     GuardContent(GuardContent),
+    /// A prompt-cache boundary. Positional, not content.
     CachePoint(CachePoint),
 }
 
@@ -140,17 +161,31 @@ impl ContentBlock {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Whether a tool call succeeded.
 pub enum ToolResultStatus {
+    /// The tool completed.
     Success,
+    /// The tool failed; the content explains why.
     Error,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+/// One part of what a tool returned.
 pub enum ToolResultContent {
-    Text { text: String },
-    Json { value: Value },
+    /// Textual output.
+    Text {
+        /// The text.
+        text: String,
+    },
+    /// Structured output.
+    Json {
+        /// The value.
+        value: Value,
+    },
+    /// An image the tool produced.
     Image(ImageContent),
+    /// A document the tool produced.
     Document(DocumentContent),
 }
 
@@ -162,7 +197,12 @@ pub enum ToolResultContent {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum SystemContentBlock {
-    Text { text: String },
+    /// A run of system-prompt text.
+    Text {
+        /// The text.
+        text: String,
+    },
+    /// A prompt-cache boundary within the system prompt.
     CachePoint(CachePoint),
 }
 
@@ -170,7 +210,9 @@ pub enum SystemContentBlock {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SystemPrompt {
+    /// Plain text, for providers with no block support.
     Text(String),
+    /// Structured blocks, which can carry cache points.
     Blocks(Vec<SystemContentBlock>),
 }
 
@@ -245,13 +287,9 @@ mod tests {
     #[test]
     fn block_prompt_joins_text_and_keeps_cache_points() {
         let p = SystemPrompt::Blocks(vec![
-            SystemContentBlock::Text {
-                text: "one".into(),
-            },
+            SystemContentBlock::Text { text: "one".into() },
             SystemContentBlock::CachePoint(CachePoint::new().with_ttl("1h")),
-            SystemContentBlock::Text {
-                text: "two".into(),
-            },
+            SystemContentBlock::Text { text: "two".into() },
         ]);
         let (text, blocks) = p.split();
         assert_eq!(text.as_deref(), Some("one\ntwo"));
@@ -273,7 +311,10 @@ mod tests {
     #[test]
     fn cache_point_ttl_is_omitted_when_absent() {
         let json = serde_json::to_string(&CachePoint::new()).unwrap();
-        assert!(!json.contains("ttl"), "unset ttl must not serialize: {json}");
+        assert!(
+            !json.contains("ttl"),
+            "unset ttl must not serialize: {json}"
+        );
 
         let json = serde_json::to_string(&CachePoint::new().with_ttl("5m")).unwrap();
         assert!(json.contains("5m"));

@@ -124,7 +124,8 @@ static CONTEXT_WINDOW_LIMITS: &[(&str, u64)] = &[
     ("mistral-medium-latest", 131_072),
     ("mistral-medium-2505", 131_072),
     ("mistral-small-latest", 131_072),
-    ("mistral-small-3-2-2506", 131_072),];
+    ("mistral-small-3-2-2506", 131_072),
+];
 
 /// Look up the context window limit for a model id.
 ///
@@ -170,10 +171,7 @@ mod tests {
     fn known_ids_resolve_directly() {
         assert_eq!(get_context_window_limit("claude-opus-5"), Some(1_000_000));
         assert_eq!(get_context_window_limit("gpt-4o"), Some(128_000));
-        assert_eq!(
-            get_context_window_limit("gemini-2.5-pro"),
-            Some(1_048_576)
-        );
+        assert_eq!(get_context_window_limit("gemini-2.5-pro"), Some(1_048_576));
     }
 
     #[test]

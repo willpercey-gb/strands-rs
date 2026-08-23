@@ -30,6 +30,7 @@ pub struct SlidingWindowConversationManager {
 }
 
 impl SlidingWindowConversationManager {
+    /// Create a new instance.
     pub fn new(window_size: usize) -> Self {
         Self {
             window_size,
@@ -39,6 +40,7 @@ impl SlidingWindowConversationManager {
     }
 
     /// Permanently pin the first `count` messages.
+    /// Set the pin first.
     pub fn with_pin_first(mut self, count: usize) -> Self {
         self.pin_first = Some(count);
         self
@@ -182,7 +184,9 @@ mod tests {
     async fn window_size_zero_clears_history() {
         let cm = SlidingWindowConversationManager::new(0);
         let mut msgs = vec![Message::user("a"), Message::user("b")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         assert!(msgs.is_empty());
     }
 
@@ -190,7 +194,9 @@ mod tests {
     async fn under_window_is_untouched() {
         let cm = SlidingWindowConversationManager::new(10);
         let mut msgs = vec![Message::user("a"), Message::user("b")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         assert_eq!(msgs.len(), 2);
     }
 
@@ -205,7 +211,9 @@ mod tests {
             user_tool_result("1"),
             Message::user("next"),
         ];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
 
         assert!(
             !msgs[0].has_tool_result(),
@@ -226,7 +234,9 @@ mod tests {
             user_tool_result("2"),
         ];
         let before = msgs.len();
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
 
         assert!(msgs.len() < before, "expected a reduction");
         assert!(msgs[0].has_tool_use());
@@ -242,7 +252,9 @@ mod tests {
             Message::user("c"),
             Message::user("d"),
         ];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
 
         assert_eq!(
             msgs[0].text(),
@@ -256,7 +268,9 @@ mod tests {
     async fn window_size_zero_still_keeps_pins() {
         let cm = SlidingWindowConversationManager::new(0).with_pin_first(1);
         let mut msgs = vec![Message::user("keep"), Message::user("drop")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
 
         assert_eq!(msgs.len(), 1);
         assert_eq!(msgs[0].text(), "keep");
@@ -269,21 +283,30 @@ mod tests {
         let cm = SlidingWindowConversationManager::new(2).with_pin_first(1);
 
         let mut msgs = vec![Message::user("a"), Message::user("b"), Message::user("c")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         let pinned_after_first = super::super::pin::is_pinned(&msgs, 0);
 
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         let newly_pinned = (1..msgs.len()).any(|i| super::super::pin::is_pinned(&msgs, i));
 
         assert!(pinned_after_first);
-        assert!(!newly_pinned, "later messages must not be pinned retroactively");
+        assert!(
+            !newly_pinned,
+            "later messages must not be pinned retroactively"
+        );
     }
 
     #[tokio::test]
     async fn a_fully_pinned_trim_range_is_left_intact() {
         let cm = SlidingWindowConversationManager::new(1).with_pin_first(3);
         let mut msgs = vec![Message::user("a"), Message::user("b"), Message::user("c")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         assert_eq!(msgs.len(), 3, "nothing is evictable, so nothing is evicted");
     }
 
@@ -291,7 +314,9 @@ mod tests {
     async fn untrimmable_history_is_left_intact_rather_than_corrupted() {
         let cm = SlidingWindowConversationManager::new(1);
         let mut msgs = vec![assistant_tool_use("1"), user_tool_result("1")];
-        cm.reduce_context(&mut msgs, ReduceContext::default()).await.unwrap();
+        cm.reduce_context(&mut msgs, ReduceContext::default())
+            .await
+            .unwrap();
         // Better to exceed the window than to emit an invalid history.
         assert_eq!(msgs.len(), 2);
     }

@@ -18,18 +18,22 @@ pub struct InMemoryStorage {
 }
 
 impl InMemoryStorage {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Number of entries.
     pub async fn len(&self) -> usize {
         self.values.read().await.len()
     }
 
+    /// Whether there are no entries.
     pub async fn is_empty(&self) -> bool {
         self.values.read().await.is_empty()
     }
 
+    /// Remove every entry.
     pub async fn clear(&self) {
         self.values.write().await.clear();
     }

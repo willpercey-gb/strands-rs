@@ -10,7 +10,9 @@ use crate::types::streaming::{Metrics, StopReason, Usage};
 /// Per-tool execution counters.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ToolMetrics {
+    /// How many times this tool ran.
     pub call_count: usize,
+    /// How many of those calls returned an error.
     pub error_count: usize,
     /// Total time spent in this tool.
     pub total_duration: Duration,
@@ -42,30 +44,41 @@ impl ToolMetrics {
 /// One cycle of the agent loop.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct CycleMetrics {
+    /// Tokens consumed by this cycle's model call.
     pub usage: Usage,
+    /// Latency of this cycle's model call.
     pub metrics: Metrics,
+    /// How many tools the model asked for in this cycle.
     pub tool_calls: usize,
 }
 
 /// Everything measured across one invocation.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AgentMetrics {
+    /// One entry per model call, in order.
     pub cycles: Vec<CycleMetrics>,
+    /// Tokens summed across every cycle.
     pub total_usage: Usage,
+    /// Latency summed across every cycle.
     pub total_metrics: Metrics,
+    /// Per-tool counters, keyed by tool name.
     pub tools: HashMap<String, ToolMetrics>,
+    /// Why the invocation ended, once it has.
     pub stop_reason: Option<StopReason>,
 }
 
 impl AgentMetrics {
+    /// How many model calls were made.
     pub fn cycle_count(&self) -> usize {
         self.cycles.len()
     }
 
+    /// Tool calls across every tool.
     pub fn total_tool_calls(&self) -> usize {
         self.tools.values().map(|t| t.call_count).sum()
     }
 
+    /// Failed tool calls across every tool.
     pub fn total_tool_errors(&self) -> usize {
         self.tools.values().map(|t| t.error_count).sum()
     }
@@ -93,6 +106,7 @@ pub struct MetricsCollector {
 }
 
 impl MetricsCollector {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -117,14 +131,17 @@ impl MetricsCollector {
             .record(duration, is_error);
     }
 
+    /// Record why the invocation ended.
     pub fn set_stop_reason(&mut self, reason: StopReason) {
         self.metrics.stop_reason = Some(reason);
     }
 
+    /// Borrow the metrics collected so far.
     pub fn snapshot(&self) -> &AgentMetrics {
         &self.metrics
     }
 
+    /// Consume the collector, returning the metrics.
     pub fn finish(self) -> AgentMetrics {
         self.metrics
     }

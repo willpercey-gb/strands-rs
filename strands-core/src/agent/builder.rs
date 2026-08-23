@@ -5,12 +5,12 @@ use std::sync::Arc;
 use crate::conversation::sliding_window::SlidingWindowConversationManager;
 use crate::conversation::ConversationManager;
 use crate::error::StrandsError;
-use crate::types::content::SystemPrompt;
 use crate::hooks::{Hook, HookRegistry};
 use crate::model::Model;
 use crate::plugin::Plugin;
 use crate::session::SessionManager;
 use crate::tool::{ConcurrentToolExecutor, SequentialToolExecutor, Tool, ToolExecutor};
+use crate::types::content::SystemPrompt;
 
 use super::callback::CallbackHandler;
 use super::event_loop::RetryConfig;
@@ -40,6 +40,7 @@ pub struct AgentBuilder {
 }
 
 impl AgentBuilder {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self {
             model: None,
@@ -82,9 +83,9 @@ impl AgentBuilder {
     pub fn model_middleware(
         mut self,
         middleware: impl crate::middleware::Middleware<
-            crate::middleware::InvokeModelContext,
-            crate::middleware::stages::InvokeModelResult,
-        > + 'static,
+                crate::middleware::InvokeModelContext,
+                crate::middleware::stages::InvokeModelResult,
+            > + 'static,
     ) -> Self {
         self.model_middleware.push(middleware);
         self

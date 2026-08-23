@@ -24,8 +24,11 @@ use super::{Tool, ToolContext, ToolOutput};
 /// One tool call requested by the model.
 #[derive(Debug, Clone, Copy)]
 pub struct ToolCall<'a> {
+    /// Identifier the result must echo back.
     pub tool_use_id: &'a str,
+    /// Tool to invoke.
     pub name: &'a str,
+    /// Arguments from the model.
     pub input: &'a Value,
 }
 
@@ -434,21 +437,21 @@ mod tests {
         for blocks in [
             SequentialToolExecutor
                 .execute(
-                &tools,
-                &calls,
-                &ToolContext::default(),
-                &HookRegistry::new(),
-                &mut InterruptState::new(),
-            )
+                    &tools,
+                    &calls,
+                    &ToolContext::default(),
+                    &HookRegistry::new(),
+                    &mut InterruptState::new(),
+                )
                 .await,
             ConcurrentToolExecutor
                 .execute(
-                &tools,
-                &calls,
-                &ToolContext::default(),
-                &HookRegistry::new(),
-                &mut InterruptState::new(),
-            )
+                    &tools,
+                    &calls,
+                    &ToolContext::default(),
+                    &HookRegistry::new(),
+                    &mut InterruptState::new(),
+                )
                 .await,
         ] {
             match &blocks[0] {

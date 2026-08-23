@@ -20,6 +20,7 @@ pub struct AgentState {
 }
 
 impl AgentState {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -66,22 +67,27 @@ impl AgentState {
         self.values.remove(key)
     }
 
+    /// Whether a value exists for this key.
     pub fn contains_key(&self, key: &str) -> bool {
         self.values.contains_key(key)
     }
 
+    /// Iterate the keys.
     pub fn keys(&self) -> impl Iterator<Item = &String> {
         self.values.keys()
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.values.len()
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.values.is_empty()
     }
 
+    /// Remove every entry.
     pub fn clear(&mut self) {
         self.values.clear();
     }

@@ -43,6 +43,7 @@ impl Default for HttpRequestTool {
 }
 
 impl HttpRequestTool {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self {
             client: reqwest::Client::builder()
@@ -58,6 +59,7 @@ impl HttpRequestTool {
         }
     }
 
+    /// Set the max body.
     pub fn with_max_body(mut self, bytes: usize) -> Self {
         self.max_body = bytes;
         self
@@ -296,7 +298,10 @@ mod tests {
             let out = refuse(&tool, url).await;
             assert!(out.is_error, "expected {url} to be refused");
             assert!(
-                out.content.as_str().unwrap().contains("private or loopback"),
+                out.content
+                    .as_str()
+                    .unwrap()
+                    .contains("private or loopback"),
                 "unexpected reason for {url}: {:?}",
                 out.content
             );

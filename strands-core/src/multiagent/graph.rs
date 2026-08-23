@@ -50,8 +50,11 @@ pub type EdgeCondition = Arc<dyn Fn(&GraphState) -> bool + Send + Sync>;
 
 /// A directed edge in the graph.
 pub struct GraphEdge {
+    /// Node the edge leaves.
     pub from_node: String,
+    /// Node the edge enters.
     pub to_node: String,
+    /// When set, the edge is only traversed if this returns true.
     pub condition: Option<EdgeCondition>,
 }
 
@@ -122,6 +125,7 @@ pub struct Graph {
 }
 
 impl Graph {
+    /// Start building one.
     pub fn builder() -> GraphBuilder {
         GraphBuilder::new()
     }
@@ -344,6 +348,7 @@ pub struct GraphBuilder {
 }
 
 impl GraphBuilder {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self {
             agents: Vec::new(),
@@ -417,7 +422,9 @@ impl GraphBuilder {
     /// Build the graph.
     pub fn build(self) -> Result<Graph, StrandsError> {
         if self.agents.is_empty() {
-            return Err(StrandsError::Other("Graph requires at least one node".into()));
+            return Err(StrandsError::Other(
+                "Graph requires at least one node".into(),
+            ));
         }
 
         let mut nodes = HashMap::new();

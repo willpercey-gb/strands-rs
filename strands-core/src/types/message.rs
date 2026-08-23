@@ -7,9 +7,13 @@ use super::streaming::{Metrics, Usage};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Who is speaking in a message.
 pub enum Role {
+    /// The human, or a tool result standing in for one.
     User,
+    /// The model.
     Assistant,
+    /// System-level instruction. Most providers take this separately.
     System,
 }
 
@@ -32,14 +36,18 @@ pub struct MessageMetadata {
 }
 
 impl MessageMetadata {
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.usage.is_none() && self.metrics.is_none() && self.custom.is_empty()
     }
 }
 
+/// One turn in a conversation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Message {
+    /// Who is speaking.
     pub role: Role,
+    /// The message body.
     pub content: Vec<ContentBlock>,
     /// Durable identifier for this message.
     ///
@@ -56,13 +64,12 @@ pub struct Message {
 }
 
 impl Message {
+    /// A user message containing `text`.
     pub fn user(text: impl Into<String>) -> Self {
-        Self::new(
-            Role::User,
-            vec![ContentBlock::Text { text: text.into() }],
-        )
+        Self::new(Role::User, vec![ContentBlock::Text { text: text.into() }])
     }
 
+    /// An assistant message with the given content.
     pub fn assistant(content: Vec<ContentBlock>) -> Self {
         Self::new(Role::Assistant, content)
     }
@@ -95,12 +102,14 @@ impl Message {
     }
 
     /// Builder-style tracking id assignment.
+    /// Set the tracking id.
     pub fn with_tracking_id(mut self, id: impl Into<String>) -> Self {
         self.tracking_id = Some(id.into());
         self
     }
 
     /// Attach metadata.
+    /// Set the metadata.
     pub fn with_metadata(mut self, metadata: MessageMetadata) -> Self {
         self.metadata = Some(metadata);
         self

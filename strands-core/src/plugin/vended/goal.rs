@@ -14,12 +14,14 @@ use crate::error::StrandsError;
 /// A judge's verdict on whether a goal has been met.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Verdict {
+    /// Whether the goal is met.
     pub achieved: bool,
     /// What is still missing. Fed back to the agent when not achieved.
     pub feedback: String,
 }
 
 impl Verdict {
+    /// The goal is met.
     pub fn achieved() -> Self {
         Self {
             achieved: true,
@@ -27,6 +29,7 @@ impl Verdict {
         }
     }
 
+    /// The goal is not met, with what is missing.
     pub fn not_yet(feedback: impl Into<String>) -> Self {
         Self {
             achieved: false,
@@ -38,6 +41,7 @@ impl Verdict {
 /// Decides whether a goal has been met.
 #[async_trait]
 pub trait GoalJudge: Send + Sync {
+    /// Decide whether `output` satisfies `goal`.
     async fn judge(&self, goal: &str, output: &str) -> Result<Verdict, StrandsError>;
 }
 
@@ -50,6 +54,7 @@ pub struct ContainsJudge {
 }
 
 impl ContainsJudge {
+    /// Create a new instance.
     pub fn new<I, S>(required: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -93,13 +98,16 @@ pub struct GoalLoop {
 /// How a goal loop ended.
 #[derive(Debug, Clone, PartialEq)]
 pub struct GoalOutcome {
+    /// Whether the goal was met before attempts ran out.
     pub achieved: bool,
+    /// How many attempts were made.
     pub attempts: usize,
     /// The judge's last verdict.
     pub last_feedback: String,
 }
 
 impl GoalLoop {
+    /// Create a new instance.
     pub fn new(goal: impl Into<String>, judge: impl GoalJudge + 'static) -> Self {
         Self {
             goal: goal.into(),
@@ -113,11 +121,13 @@ impl GoalLoop {
     /// Bounded because a goal the agent cannot reach would otherwise loop
     /// until the token budget runs out, which is an expensive way to discover
     /// the goal was unreachable.
+    /// Set the max attempts.
     pub fn with_max_attempts(mut self, attempts: usize) -> Self {
         self.max_attempts = attempts.max(1);
         self
     }
 
+    /// The objective being pursued.
     pub fn goal(&self) -> &str {
         &self.goal
     }
@@ -230,8 +240,8 @@ mod tests {
         let calls = Arc::new(Mutex::new(0));
         let counted = calls.clone();
 
-        let loop_ = GoalLoop::new("impossible", ContainsJudge::new(["never appears"]))
-            .with_max_attempts(3);
+        let loop_ =
+            GoalLoop::new("impossible", ContainsJudge::new(["never appears"])).with_max_attempts(3);
 
         let outcome = loop_
             .run(move |_| {

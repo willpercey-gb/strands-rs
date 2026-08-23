@@ -53,20 +53,24 @@ impl Default for ShellTool {
 }
 
 impl ShellTool {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the timeout.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
+    /// Set the max output.
     pub fn with_max_output(mut self, bytes: usize) -> Self {
         self.max_output = bytes;
         self
     }
 
+    /// Set the working dir.
     pub fn with_working_dir(mut self, dir: impl Into<std::path::PathBuf>) -> Self {
         self.working_dir = Some(dir.into());
         self
@@ -110,10 +114,7 @@ impl ShellTool {
             return text;
         }
         let kept: String = text.chars().take(self.max_output).collect();
-        format!(
-            "{kept}\n[{stream} truncated at {} bytes]",
-            self.max_output
-        )
+        format!("{kept}\n[{stream} truncated at {} bytes]", self.max_output)
     }
 }
 
@@ -262,7 +263,11 @@ mod tests {
         let tool = ShellTool::new().with_max_output(50);
         let out = run(&tool, "printf 'x%.0s' $(seq 1 500)").await;
         let stdout = out.content["stdout"].as_str().unwrap();
-        assert!(stdout.len() < 200, "expected truncation, got {}", stdout.len());
+        assert!(
+            stdout.len() < 200,
+            "expected truncation, got {}",
+            stdout.len()
+        );
         assert!(stdout.contains("truncated"), "truncation must be visible");
     }
 

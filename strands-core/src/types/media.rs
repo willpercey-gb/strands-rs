@@ -51,7 +51,12 @@ pub enum SourceLocation {
     Other,
 }
 
+/// Image formats providers accept.
+///
+/// Variants name the format and carry no other meaning, so they are
+/// not individually documented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(missing_docs)]
 #[serde(rename_all = "snake_case")]
 pub enum ImageFormat {
     Png,
@@ -60,14 +65,22 @@ pub enum ImageFormat {
     Webp,
 }
 
+/// An image to include in a message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageContent {
+    /// Encoding of the image data.
     pub format: ImageFormat,
+    /// Where the image bytes live.
     pub source: MediaSource,
 }
 
+/// Document formats providers accept.
+///
+/// Variants name the format and carry no other meaning, so they are
+/// not individually documented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(missing_docs)]
 #[serde(rename_all = "snake_case")]
 pub enum DocumentFormat {
     Pdf,
@@ -81,13 +94,16 @@ pub enum DocumentFormat {
     Md,
 }
 
+/// A document to include in a message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DocumentContent {
+    /// Encoding of the document data.
     pub format: DocumentFormat,
     /// Human-readable document name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<String>,
+    /// Where the document bytes live.
     pub source: MediaSource,
     /// Whether the model may cite this document.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -97,13 +113,20 @@ pub struct DocumentContent {
     pub context: Option<String>,
 }
 
+/// Whether a document may be cited.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitationsConfig {
+    /// Whether the model may cite this document in its answer.
     pub enabled: bool,
 }
 
+/// Audio formats providers accept.
+///
+/// Variants name the format and carry no other meaning, so they are
+/// not individually documented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(missing_docs)]
 #[serde(rename_all = "snake_case")]
 pub enum AudioFormat {
     Mp3,
@@ -124,14 +147,22 @@ pub enum AudioFormat {
     Webm,
 }
 
+/// Audio to include in a message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AudioContent {
+    /// Encoding of the audio data.
     pub format: AudioFormat,
+    /// Where the audio bytes live.
     pub source: MediaSource,
 }
 
+/// Video formats providers accept.
+///
+/// Variants name the format and carry no other meaning, so they are
+/// not individually documented.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[allow(missing_docs)]
 #[serde(rename_all = "snake_case")]
 pub enum VideoFormat {
     Flv,
@@ -145,9 +176,12 @@ pub enum VideoFormat {
     Wmv,
 }
 
+/// Video to include in a message.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct VideoContent {
+    /// Encoding of the video data.
     pub format: VideoFormat,
+    /// Where the video bytes live.
     pub source: MediaSource,
 }

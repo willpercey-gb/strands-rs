@@ -17,7 +17,9 @@
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
+use strands_core::types::streaming::{
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
+};
 
 #[derive(Default)]
 pub(crate) struct ClaudeCliState {
@@ -301,9 +303,12 @@ mod tests {
             .collect::<Vec<_>>()
             .join("");
         assert_eq!(assembled, "hi there");
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, StreamEvent::MessageStop { stop_reason: StopReason::EndTurn })));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            StreamEvent::MessageStop {
+                stop_reason: StopReason::EndTurn
+            }
+        )));
     }
 
     #[test]
@@ -415,7 +420,11 @@ mod tests {
         assert!(events.iter().any(|e| matches!(
             e,
             StreamEvent::Metadata {
-                usage: Usage { input_tokens: Some(42), output_tokens: Some(13), .. },
+                usage: Usage {
+                    input_tokens: Some(42),
+                    output_tokens: Some(13),
+                    ..
+                },
                 ..
             }
         )));

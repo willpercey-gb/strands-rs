@@ -6,45 +6,69 @@ use super::message::Role;
 /// Unified protocol between model adapters and the agent loop.
 #[derive(Debug, Clone)]
 pub enum StreamEvent {
+    /// The model began a response.
     MessageStart {
+        /// Role of the speaker, always `Assistant` in practice.
         role: Role,
     },
+    /// A new content block opened.
     ContentBlockStart {
+        /// Position of the block within the message.
         index: usize,
+        /// What kind of block this is.
         content_type: ContentBlockType,
     },
+    /// An incremental update to an open block.
     ContentBlockDelta {
+        /// Position of the block being updated.
         index: usize,
+        /// The increment.
         delta: DeltaContent,
     },
+    /// A content block closed.
     ContentBlockStop {
+        /// Position of the block that closed.
         index: usize,
     },
+    /// The response finished.
     MessageStop {
+        /// Why the model stopped.
         stop_reason: StopReason,
     },
+    /// Usage and performance figures for the call.
     Metadata {
+        /// Token counts.
         usage: Usage,
+        /// Latency figures.
         metrics: Metrics,
     },
 }
 
 #[derive(Debug, Clone)]
+/// What kind of block a stream just opened.
 pub enum ContentBlockType {
+    /// A run of text.
     Text,
+    /// A tool call.
     ToolUse {
+        /// Identifier the matching result must echo back.
         tool_use_id: String,
+        /// Name of the tool being called.
         name: String,
         /// Signature tying the model's reasoning to this tool call. Providers
         /// that emit one reject the call if it is not echoed back.
         reasoning_signature: Option<String>,
     },
+    /// Reasoning the model is working through.
     Reasoning,
 }
 
 #[derive(Debug, Clone)]
+/// An incremental update to an open content block.
 pub enum DeltaContent {
+    /// More response text.
     TextDelta(String),
+    /// More of a tool call's JSON arguments. Fragments concatenate.
     ToolInputDelta(String),
     /// Incremental reasoning text.
     ReasoningDelta(String),
@@ -55,6 +79,7 @@ pub enum DeltaContent {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// Why the model, or the agent loop, stopped.
 pub enum StopReason {
     /// Normal completion of the response.
     EndTurn,
@@ -140,12 +165,11 @@ impl Usage {
     /// Total tokens, falling back to input + output when the provider does not
     /// report a total directly.
     pub fn total(&self) -> Option<u64> {
-        self.total_tokens.or_else(|| {
-            match (self.input_tokens, self.output_tokens) {
+        self.total_tokens
+            .or_else(|| match (self.input_tokens, self.output_tokens) {
                 (None, None) => None,
                 (i, o) => Some(i.unwrap_or(0) + o.unwrap_or(0)),
-            }
-        })
+            })
     }
 }
 

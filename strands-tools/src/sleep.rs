@@ -29,11 +29,13 @@ impl Default for SleepTool {
 }
 
 impl SleepTool {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Lower the per-call cap.
+    /// Set the max seconds.
     pub fn with_max_seconds(mut self, seconds: f64) -> Self {
         self.max_seconds = seconds.max(0.0);
         self
@@ -124,7 +126,11 @@ mod tests {
 
     #[tokio::test]
     async fn rejects_negative_and_non_numeric_input() {
-        for bad in [json!({"seconds": -1}), json!({"seconds": "soon"}), json!({})] {
+        for bad in [
+            json!({"seconds": -1}),
+            json!({"seconds": "soon"}),
+            json!({}),
+        ] {
             let out = SleepTool::new()
                 .invoke(bad.clone(), &ToolContext::default())
                 .await

@@ -32,10 +32,12 @@ pub enum InjectionPlacement {
 pub struct InjectedContent {
     /// Names the source, so the model can weigh it.
     pub source: String,
+    /// The content itself.
     pub content: String,
 }
 
 impl InjectedContent {
+    /// Create a new instance.
     pub fn new(source: impl Into<String>, content: impl Into<String>) -> Self {
         Self {
             source: source.into(),
@@ -83,24 +85,29 @@ impl Default for ContextInjector {
 }
 
 impl ContextInjector {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Set the placement.
     pub fn with_placement(mut self, placement: InjectionPlacement) -> Self {
         self.placement = placement;
         self
     }
 
+    /// Set the content.
     pub fn with_content(mut self, item: InjectedContent) -> Self {
         self.items.push(item);
         self
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.items.is_empty()
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.items.len()
     }
@@ -158,7 +165,8 @@ mod tests {
     use crate::types::content::CachePoint;
 
     fn injector() -> ContextInjector {
-        ContextInjector::new().with_content(InjectedContent::new("memory", "user prefers dark mode"))
+        ContextInjector::new()
+            .with_content(InjectedContent::new("memory", "user prefers dark mode"))
     }
 
     fn prompt_with_cache_point() -> SystemPrompt {

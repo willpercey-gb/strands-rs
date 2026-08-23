@@ -10,10 +10,15 @@ use crate::types::streaming::Usage;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MultiAgentStatus {
+    /// Every node that ran finished successfully.
     Completed,
+    /// At least one node failed.
     Failed,
+    /// The run was cancelled by the caller.
     Cancelled,
+    /// The step budget was exhausted before completion.
     MaxStepsReached,
+    /// The execution timeout elapsed.
     TimedOut,
 }
 
@@ -21,20 +26,30 @@ pub enum MultiAgentStatus {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum NodeStatus {
+    /// Not started.
     Pending,
+    /// Currently running.
     Executing,
+    /// Finished successfully.
     Completed,
+    /// Finished with an error; see `NodeResult::error`.
     Failed,
+    /// Cancelled before finishing.
     Cancelled,
 }
 
 /// Result from a single node (agent) execution.
 #[derive(Debug, Clone)]
 pub struct NodeResult {
+    /// Which node this describes.
     pub node_id: String,
+    /// How the node ended.
     pub status: NodeStatus,
+    /// The agent's result, when the node produced one.
     pub result: Option<AgentResult>,
+    /// Failure detail, when the node failed.
     pub error: Option<String>,
+    /// Wall-clock time the node took.
     pub execution_time: Duration,
 }
 
@@ -63,6 +78,7 @@ impl NodeResult {
         self.result.as_ref().map(|r| r.text())
     }
 
+    /// Whether the node completed successfully.
     pub fn is_success(&self) -> bool {
         self.status == NodeStatus::Completed
     }
@@ -223,6 +239,9 @@ mod tests {
     fn node_helpers_expose_success_and_text() {
         assert!(node("a", NodeStatus::Completed, None).is_success());
         assert!(!node("a", NodeStatus::Failed, None).is_success());
-        assert_eq!(node("a", NodeStatus::Completed, None).text(), Some(String::new()));
+        assert_eq!(
+            node("a", NodeStatus::Completed, None).text(),
+            Some(String::new())
+        );
     }
 }

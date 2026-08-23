@@ -7,6 +7,7 @@
 //!
 //! Ported from upstream `telemetry/`.
 
+/// Counters accumulated over an invocation.
 pub mod metrics;
 
 pub use metrics::{AgentMetrics, CycleMetrics, MetricsCollector, ToolMetrics};
@@ -17,16 +18,27 @@ pub use metrics::{AgentMetrics, CycleMetrics, MetricsCollector, ToolMetrics};
 /// Kept as constants so a `tracing` subscriber can map them onto OTel
 /// attributes without guessing at names.
 pub mod attributes {
+    /// `gen_ai.agent.name`
     pub const AGENT_NAME: &str = "gen_ai.agent.name";
+    /// `gen_ai.operation.name`
     pub const OPERATION_NAME: &str = "gen_ai.operation.name";
+    /// `gen_ai.request.model`
     pub const REQUEST_MODEL: &str = "gen_ai.request.model";
+    /// `gen_ai.usage.input_tokens`
     pub const USAGE_INPUT_TOKENS: &str = "gen_ai.usage.input_tokens";
+    /// `gen_ai.usage.output_tokens`
     pub const USAGE_OUTPUT_TOKENS: &str = "gen_ai.usage.output_tokens";
+    /// `gen_ai.usage.cache_read_input_tokens`
     pub const USAGE_CACHE_READ_TOKENS: &str = "gen_ai.usage.cache_read_input_tokens";
+    /// `gen_ai.usage.cache_write_input_tokens`
     pub const USAGE_CACHE_WRITE_TOKENS: &str = "gen_ai.usage.cache_write_input_tokens";
+    /// `gen_ai.tool.name`
     pub const TOOL_NAME: &str = "gen_ai.tool.name";
+    /// `gen_ai.tool.call.arguments`
     pub const TOOL_CALL_ARGUMENTS: &str = "gen_ai.tool.call.arguments";
+    /// `gen_ai.tool.call.result`
     pub const TOOL_CALL_RESULT: &str = "gen_ai.tool.call.result";
+    /// `gen_ai.response.finish_reason`
     pub const RESPONSE_FINISH_REASON: &str = "gen_ai.response.finish_reason";
 }
 

@@ -45,6 +45,7 @@ pub struct FileSessionManager {
 }
 
 impl FileSessionManager {
+    /// Create a new instance.
     pub fn new(base_dir: impl Into<PathBuf>) -> Self {
         Self {
             base_dir: base_dir.into(),
@@ -55,6 +56,7 @@ impl FileSessionManager {
     ///
     /// Preferred over a shared temp directory, which on multi-user systems is
     /// world-writable and lets another user pre-create session paths.
+    /// Set the default dir.
     pub fn with_default_dir() -> Result<Self, StrandsError> {
         let home = std::env::var_os("HOME")
             .or_else(|| std::env::var_os("USERPROFILE"))

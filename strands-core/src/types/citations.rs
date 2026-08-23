@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 /// The span within a source that a citation points at.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "camelCase")]
+#[allow(missing_docs)] // Index/start/end fields are self-describing ranges.
 pub enum CitationLocation {
     /// A character range within a document.
     DocumentChar {
@@ -43,6 +44,7 @@ pub enum CitationLocation {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CitationContent {
+    /// The quoted text.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub text: Option<String>,
 }
@@ -70,5 +72,6 @@ pub struct CitationsContentBlock {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub content: Vec<CitationContent>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    /// The sources supporting that content.
     pub citations: Vec<Citation>,
 }

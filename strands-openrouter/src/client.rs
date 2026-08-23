@@ -1,8 +1,8 @@
-use strands_core::types::content::SystemPrompt;
 use async_trait::async_trait;
 use futures::stream::{self, StreamExt};
 use reqwest::Client;
 use strands_core::model::{Model, ModelStream};
+use strands_core::types::content::SystemPrompt;
 use strands_core::types::message::{Message, Role};
 use strands_core::types::streaming::StreamEvent;
 use strands_core::types::tools::ToolSpec;
@@ -243,9 +243,7 @@ fn build_request<'a>(
 /// Convert a byte stream of SSE-formatted bytes into a stream of strands
 /// `StreamEvent`s. Emits one event per `data:` JSON chunk.
 fn sse_to_events(
-    byte_stream: impl futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>>
-        + Send
-        + 'static,
+    byte_stream: impl futures::Stream<Item = Result<bytes::Bytes, reqwest::Error>> + Send + 'static,
 ) -> impl futures::Stream<Item = Result<StreamEvent, StrandsError>> + Send + 'static {
     let mut buf = String::new();
     let mut state = OpenAiStreamState::new();

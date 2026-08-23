@@ -72,6 +72,7 @@ impl<'a> ReduceContext<'a> {
         }
     }
 
+    /// Set the utilization.
     pub fn with_utilization(mut self, utilization: Option<f64>) -> Self {
         self.utilization = utilization;
         self

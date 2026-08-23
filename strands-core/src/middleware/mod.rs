@@ -17,6 +17,7 @@
 //!
 //! Ported from upstream `_middleware/`.
 
+/// The built-in interception points.
 pub mod stages;
 
 use std::sync::Arc;
@@ -69,6 +70,7 @@ where
     C: Send + 'static,
     R: Send + 'static,
 {
+    /// Run the operation.
     fn call<'a>(&'a self, ctx: C) -> BoxFuture<'a, R>;
 }
 
@@ -112,6 +114,7 @@ where
     C: Send + 'static,
     R: Send + 'static,
 {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -125,10 +128,12 @@ where
         self.middleware.push(Arc::new(middleware));
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.middleware.is_empty()
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.middleware.len()
     }
@@ -248,7 +253,11 @@ mod tests {
             name: "a",
             log: Arc::new(Mutex::new(Vec::new())),
         });
-        assert_eq!(chain.run(5, &t).await, 6, "the +1 should reach the terminal");
+        assert_eq!(
+            chain.run(5, &t).await,
+            6,
+            "the +1 should reach the terminal"
+        );
     }
 
     #[tokio::test]

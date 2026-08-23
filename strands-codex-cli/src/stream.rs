@@ -17,7 +17,9 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
+use strands_core::types::streaming::{
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
+};
 
 #[derive(Default)]
 pub(crate) struct CodexCliState {
@@ -303,12 +305,22 @@ mod tests {
             r#"{"type":"turn.completed","usage":{"input_tokens":10,"output_tokens":3}}"#,
         ]);
         assert_eq!(assembled(&events), "Hi there!");
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, StreamEvent::MessageStop { stop_reason: StopReason::EndTurn })));
         assert!(events.iter().any(|e| matches!(
             e,
-            StreamEvent::Metadata { usage: Usage { input_tokens: Some(10), output_tokens: Some(3), .. }, .. }
+            StreamEvent::MessageStop {
+                stop_reason: StopReason::EndTurn
+            }
+        )));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            StreamEvent::Metadata {
+                usage: Usage {
+                    input_tokens: Some(10),
+                    output_tokens: Some(3),
+                    ..
+                },
+                ..
+            }
         )));
     }
 

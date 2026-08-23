@@ -23,11 +23,13 @@ pub enum HookEvent {
 
     /// A message was added to conversation history.
     MessageAdded {
+        /// The message that was added.
         message: Message,
     },
 
     /// Before calling the model.
     BeforeModelCall {
+        /// Which iteration of the loop this is.
         cycle: usize,
     },
 
@@ -63,33 +65,45 @@ impl HookEvent {
     /// Teardown events run last-registered-first so a hook tears down before
     /// whatever it was layered on top of.
     pub fn is_teardown(&self) -> bool {
-        matches!(self, HookEvent::AfterTools(_) | HookEvent::AfterInvocation(_))
+        matches!(
+            self,
+            HookEvent::AfterTools(_) | HookEvent::AfterInvocation(_)
+        )
     }
 }
 
+/// Payload for [`HookEvent::BeforeInvocation`].
 #[derive(Debug)]
 pub struct BeforeInvocationEvent {
+    /// The conversation as it stands.
     pub messages: Vec<Message>,
     /// Set to override the messages the agent will process.
     pub override_messages: Option<Vec<Message>>,
 }
 
+/// Payload for [`HookEvent::AfterInvocation`].
 #[derive(Debug)]
 pub struct AfterInvocationEvent {
+    /// Why the model stopped.
     pub stop_reason: StopReason,
+    /// How many cycles ran.
     pub cycle_count: usize,
     /// Set to `true` to re-invoke the agent with the same messages.
     pub resume: bool,
 }
 
+/// Payload for [`HookEvent::AfterModelCall`].
 #[derive(Debug)]
 pub struct AfterModelCallEvent {
+    /// Why the model stopped.
     pub stop_reason: StopReason,
+    /// Which iteration of the loop this is.
     pub cycle: usize,
     /// Set to `true` to retry the model call (e.g., on throttling).
     pub retry: bool,
 }
 
+/// Payload for [`HookEvent::BeforeTools`].
 #[derive(Debug)]
 pub struct BeforeToolsEvent {
     /// The tool calls the model requested, as `(tool_use_id, name)`.
@@ -98,6 +112,7 @@ pub struct BeforeToolsEvent {
     pub cancel: bool,
 }
 
+/// Payload for [`HookEvent::AfterTools`].
 #[derive(Debug)]
 pub struct AfterToolsEvent {
     /// Outcome of each tool in the batch, as `(tool_name, is_error)`.
@@ -106,9 +121,12 @@ pub struct AfterToolsEvent {
     pub end_turn: bool,
 }
 
+/// Payload for [`HookEvent::BeforeToolCall`].
 #[derive(Debug)]
 pub struct BeforeToolCallEvent {
+    /// Name of the tool involved.
     pub tool_name: String,
+    /// Arguments the model supplied.
     pub input: Value,
     /// Set to `true` to cancel this tool execution.
     pub cancel: bool,
@@ -130,9 +148,12 @@ impl BeforeToolCallEvent {
     }
 }
 
+/// Payload for [`HookEvent::AfterToolCall`].
 #[derive(Debug)]
 pub struct AfterToolCallEvent {
+    /// Name of the tool involved.
     pub tool_name: String,
+    /// Whether the call returned an error.
     pub is_error: bool,
     /// How long the tool took to execute.
     pub duration: std::time::Duration,

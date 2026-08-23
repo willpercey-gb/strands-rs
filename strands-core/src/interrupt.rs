@@ -47,6 +47,7 @@ pub struct Interrupt {
 }
 
 impl Interrupt {
+    /// Create a new instance.
     pub fn new(name: impl Into<String>, reason: Option<Value>) -> Self {
         let name = name.into();
         Self {
@@ -73,6 +74,7 @@ pub struct InterruptResponse {
 }
 
 impl InterruptResponse {
+    /// Create a new instance.
     pub fn new(interrupt_id: impl Into<String>, response: impl Into<Value>) -> Self {
         Self {
             interrupt_id: interrupt_id.into(),
@@ -92,6 +94,7 @@ pub struct InterruptState {
 }
 
 impl InterruptState {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -167,6 +170,7 @@ impl InterruptState {
         self.interrupts.clear();
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.interrupts.is_empty()
     }

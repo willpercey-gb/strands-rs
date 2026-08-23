@@ -44,16 +44,19 @@ impl Limits {
         }
     }
 
+    /// Set the turns.
     pub fn with_turns(mut self, turns: usize) -> Self {
         self.turns = Some(turns);
         self
     }
 
+    /// Set the output tokens.
     pub fn with_output_tokens(mut self, tokens: u64) -> Self {
         self.output_tokens = Some(tokens);
         self
     }
 
+    /// Set the total tokens.
     pub fn with_total_tokens(mut self, tokens: u64) -> Self {
         self.total_tokens = Some(tokens);
         self
@@ -104,15 +107,24 @@ mod tests {
     #[test]
     fn no_caps_never_trip() {
         assert!(Limits::none().is_unbounded());
-        assert_eq!(Limits::none().exceeded(1_000, &usage(1e9 as u64, 1e9 as u64)), None);
+        assert_eq!(
+            Limits::none().exceeded(1_000, &usage(1e9 as u64, 1e9 as u64)),
+            None
+        );
     }
 
     #[test]
     fn turn_cap_trips_on_reaching_the_limit() {
         let l = Limits::turns(3);
         assert_eq!(l.exceeded(2, &Usage::default()), None);
-        assert_eq!(l.exceeded(3, &Usage::default()), Some(StopReason::LimitTurns));
-        assert_eq!(l.exceeded(4, &Usage::default()), Some(StopReason::LimitTurns));
+        assert_eq!(
+            l.exceeded(3, &Usage::default()),
+            Some(StopReason::LimitTurns)
+        );
+        assert_eq!(
+            l.exceeded(4, &Usage::default()),
+            Some(StopReason::LimitTurns)
+        );
     }
 
     #[test]

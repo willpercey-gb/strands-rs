@@ -1,23 +1,37 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+/// Everything that can go wrong in an agent run.
 pub enum StrandsError {
     #[error("Model error: {0}")]
+    /// The provider rejected or failed the request.
     Model(String),
 
     #[error("Tool error: {tool_name}: {message}")]
-    Tool { tool_name: String, message: String },
+    /// A tool failed. Usually surfaced to the model as a tool result rather
+    /// than raised, so it can try something else.
+    Tool {
+        /// Which tool failed.
+        tool_name: String,
+        /// What went wrong.
+        message: String,
+    },
 
     #[error("Tool not found: {0}")]
+    /// The model asked for a tool that is not registered.
     ToolNotFound(String),
 
     #[error("Max cycles reached ({0})")]
+    /// The hard cycle backstop was hit. Prefer [`Limits`](crate::agent::Limits),
+    /// which stops cleanly instead of erroring.
     MaxCycles(usize),
 
     #[error("Max tokens reached")]
+    /// The provider truncated the response at its output cap.
     MaxTokens,
 
     #[error("Cancelled")]
+    /// The caller cancelled the run.
     Cancelled,
 
     /// Non-retryable model failure: quota exhausted, rate-limit hit,
@@ -37,18 +51,23 @@ pub enum StrandsError {
     ContextWindowOverflow(String),
 
     #[error("Conversation management error: {0}")]
+    /// The conversation manager could not reduce the history.
     ConversationManagement(String),
 
     #[error("Session error: {0}")]
+    /// Session persistence failed.
     Session(String),
 
     #[error("Serialization error: {0}")]
+    /// JSON encoding or decoding failed.
     Serialization(#[from] serde_json::Error),
 
     #[error("{0}")]
+    /// Anything not covered above.
     Other(String),
 }
 
+/// A result whose error is a [`StrandsError`].
 pub type Result<T> = std::result::Result<T, StrandsError>;
 
 impl StrandsError {
@@ -64,7 +83,9 @@ impl StrandsError {
     pub fn is_retryable(&self) -> bool {
         !matches!(
             self,
-            StrandsError::Quota(_) | StrandsError::Cancelled | StrandsError::ContextWindowOverflow(_)
+            StrandsError::Quota(_)
+                | StrandsError::Cancelled
+                | StrandsError::ContextWindowOverflow(_)
         )
     }
 }
@@ -164,9 +185,8 @@ mod tests {
     fn overflow_wins_over_quota_when_both_could_match() {
         // "reduce the length" is recoverable by trimming; classifying it as a
         // quota failure would short-circuit the retry that would have fixed it.
-        let error = classify_provider_failure(
-            "rate limit note: please reduce the length of the messages",
-        );
+        let error =
+            classify_provider_failure("rate limit note: please reduce the length of the messages");
         assert!(error.is_context_overflow(), "got {error:?}");
     }
 

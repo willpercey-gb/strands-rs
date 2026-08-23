@@ -19,13 +19,17 @@ use tracing::{debug, warn};
 /// What a command produced.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommandOutput {
+    /// Everything written to standard output.
     pub stdout: String,
+    /// Everything written to standard error.
     pub stderr: String,
     /// `None` when the process was killed by a signal.
+    /// Process exit code, or `None` if it was killed by a signal.
     pub exit_code: Option<i32>,
 }
 
 impl CommandOutput {
+    /// Whether the command exited zero.
     pub fn is_success(&self) -> bool {
         self.exit_code == Some(0)
     }
@@ -34,13 +38,18 @@ impl CommandOutput {
 /// A command to run.
 #[derive(Debug, Clone)]
 pub struct Command {
+    /// The shell command to run.
     pub command: String,
+    /// How long to wait before giving up.
     pub timeout: Duration,
+    /// Extra environment variables.
     pub env: HashMap<String, String>,
+    /// Directory to run in.
     pub working_dir: Option<String>,
 }
 
 impl Command {
+    /// A command to run, with default timeout and no environment overrides.
     pub fn new(command: impl Into<String>) -> Self {
         Self {
             command: command.into(),
@@ -50,16 +59,19 @@ impl Command {
         }
     }
 
+    /// Set the timeout.
     pub fn with_timeout(mut self, timeout: Duration) -> Self {
         self.timeout = timeout;
         self
     }
 
+    /// Set the env.
     pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.env.insert(key.into(), value.into());
         self
     }
 
+    /// Set the working dir.
     pub fn with_working_dir(mut self, dir: impl Into<String>) -> Self {
         self.working_dir = Some(dir.into());
         self
@@ -133,6 +145,7 @@ pub struct DockerSandbox {
 }
 
 impl DockerSandbox {
+    /// A sandbox backed by the given container image.
     pub fn new(image: impl Into<String>) -> Self {
         Self {
             image: image.into(),
@@ -148,11 +161,13 @@ impl DockerSandbox {
     ///
     /// Off by default. Enabling it means the sandbox contains filesystem and
     /// process damage but not exfiltration.
+    /// Set the network.
     pub fn with_network(mut self, network: impl Into<String>) -> Self {
         self.network = Some(network.into());
         self
     }
 
+    /// Extra flags for `docker run`, such as resource limits.
     pub fn with_extra_args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -162,6 +177,7 @@ impl DockerSandbox {
         self
     }
 
+    /// Name of the container this sandbox runs in.
     pub fn container_name(&self) -> &str {
         &self.container_name
     }
@@ -227,9 +243,7 @@ impl Sandbox for DockerSandbox {
             .stderr(Stdio::null())
             .status()
             .await
-            .map_err(|e| {
-                StrandsError::Other(format!("docker CLI not available: {e}"))
-            })?;
+            .map_err(|e| StrandsError::Other(format!("docker CLI not available: {e}")))?;
 
         if !output.success() {
             return Err(StrandsError::Other(
@@ -352,10 +366,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_failing_command_reports_its_exit_code() {
-        let output = LocalEnvironment
-            .run(&Command::new("exit 7"))
-            .await
-            .unwrap();
+        let output = LocalEnvironment.run(&Command::new("exit 7")).await.unwrap();
         assert_eq!(output.exit_code, Some(7));
         assert!(!output.is_success());
     }
@@ -384,7 +395,10 @@ mod tests {
         let sandbox = DockerSandbox::new("alpine");
         let args = sandbox.docker_args(&Command::new("echo hi"));
 
-        let network_index = args.iter().position(|a| a == "--network").expect("--network");
+        let network_index = args
+            .iter()
+            .position(|a| a == "--network")
+            .expect("--network");
         assert_eq!(args[network_index + 1], "none");
     }
 

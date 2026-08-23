@@ -7,7 +7,7 @@
 //! Pins propagate across a tool pair: pinning an `assistant(ToolUse)` implicitly
 //! protects the `user(ToolResult)` that answers it, and vice versa. Without
 //! that, pinning half a pair would produce exactly the orphaned-tool-block
-//! history that [`super::trim`] exists to avoid.
+//! history that [`super::trim`](crate::conversation::trim) exists to avoid.
 //!
 //! Ported from upstream
 //! `agent/conversation_manager/compression/pin_message.py`.
@@ -174,7 +174,10 @@ mod tests {
             .insert("other".into(), json!("keep me"));
 
         unpin_message(&mut msgs, 0);
-        assert!(msgs[0].metadata.is_some(), "unrelated metadata must survive");
+        assert!(
+            msgs[0].metadata.is_some(),
+            "unrelated metadata must survive"
+        );
         assert!(!is_pinned(&msgs, 0));
     }
 
@@ -193,7 +196,10 @@ mod tests {
     fn pinning_a_tool_result_protects_its_use() {
         let mut msgs = vec![tool_use("1"), tool_result("1")];
         pin_message(&mut msgs, 1);
-        assert!(is_pinned(&msgs, 0), "the originating call must be protected");
+        assert!(
+            is_pinned(&msgs, 0),
+            "the originating call must be protected"
+        );
     }
 
     #[test]
@@ -216,11 +222,7 @@ mod tests {
 
     #[test]
     fn pin_first_protects_the_opening_messages() {
-        let mut msgs = vec![
-            Message::user("a"),
-            Message::user("b"),
-            Message::user("c"),
-        ];
+        let mut msgs = vec![Message::user("a"), Message::user("b"), Message::user("c")];
         apply_pin_first(&mut msgs, 2);
 
         assert!(is_pinned(&msgs, 0));
@@ -237,11 +239,7 @@ mod tests {
 
     #[test]
     fn unpinned_indices_skips_protected_messages() {
-        let mut msgs = vec![
-            Message::user("a"),
-            Message::user("b"),
-            Message::user("c"),
-        ];
+        let mut msgs = vec![Message::user("a"), Message::user("b"), Message::user("c")];
         pin_message(&mut msgs, 1);
         assert_eq!(unpinned_indices(&msgs, 0..3), vec![0, 2]);
     }

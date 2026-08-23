@@ -77,7 +77,16 @@ pub fn install(name: &str, port: u16) -> Result<String, String> {
 
     let out = Command::new("claude")
         .args([
-            "mcp", "add", name, "-s", "user", "--", &shim_str, "--name", name, "--port",
+            "mcp",
+            "add",
+            name,
+            "-s",
+            "user",
+            "--",
+            &shim_str,
+            "--name",
+            name,
+            "--port",
             &port.to_string(),
         ])
         .output()

@@ -170,7 +170,11 @@ mod tests {
     #[test]
     fn system_prompt_and_tools_are_included() {
         let msgs = vec![Message::user("hello there")];
-        let specs = vec![ToolSpec::new("t", "does a thing", json!({"type": "object"}))];
+        let specs = vec![ToolSpec::new(
+            "t",
+            "does a thing",
+            json!({"type": "object"}),
+        )];
         let prompt = SystemPrompt::from("you are helpful");
 
         let with_all = estimate_tokens(&msgs, &specs, Some(&prompt));

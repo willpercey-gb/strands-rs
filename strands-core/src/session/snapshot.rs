@@ -6,7 +6,7 @@
 //! earlier point.
 //!
 //! That completeness is the whole point: restoring messages alone silently
-//! loses whatever the agent had accumulated in [`AgentState`], which is exactly
+//! loses whatever the agent had accumulated in [`AgentState`](crate::agent::AgentState), which is exactly
 //! the context a resumed run needs.
 //!
 //! Ported from upstream `session/snapshot_session_manager.py` and
@@ -73,11 +73,13 @@ impl Snapshot {
         }
     }
 
+    /// Set the conversation manager state.
     pub fn with_conversation_manager_state(mut self, state: Value) -> Self {
         self.conversation_manager_state = Some(state);
         self
     }
 
+    /// Set the model state.
     pub fn with_model_state(mut self, state: Value) -> Self {
         self.model_state = Some(state);
         self
@@ -119,14 +121,17 @@ pub struct InMemorySnapshotStore {
 }
 
 impl InMemorySnapshotStore {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Number of entries.
     pub async fn len(&self) -> usize {
         self.snapshots.lock().await.len()
     }
 
+    /// Whether there are no entries.
     pub async fn is_empty(&self) -> bool {
         self.snapshots.lock().await.is_empty()
     }
@@ -213,8 +218,7 @@ mod tests {
         let id = message.ensure_tracking_id().to_string();
 
         let snap = Snapshot::new("s1", "a", vec![message], AgentState::new());
-        let back: Snapshot =
-            serde_json::from_str(&serde_json::to_string(&snap).unwrap()).unwrap();
+        let back: Snapshot = serde_json::from_str(&serde_json::to_string(&snap).unwrap()).unwrap();
 
         assert_eq!(back.messages[0].tracking_id.as_deref(), Some(id.as_str()));
     }

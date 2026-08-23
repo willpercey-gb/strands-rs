@@ -10,8 +10,8 @@
 
 #![cfg(feature = "macros")]
 
-use strands_core::tool::{Tool, ToolContext};
 use strands_core::tool;
+use strands_core::tool::{Tool, ToolContext};
 use strands_core::StrandsError;
 
 /// Get the current weather for a city.
@@ -21,10 +21,7 @@ use strands_core::StrandsError;
 /// * `city` - The city to check weather for
 /// * `unit` - Temperature unit (celsius or fahrenheit)
 #[tool]
-async fn get_weather(
-    city: String,
-    unit: Option<String>,
-) -> Result<String, StrandsError> {
+async fn get_weather(city: String, unit: Option<String>) -> Result<String, StrandsError> {
     let unit = unit.unwrap_or_else(|| "celsius".into());
     Ok(format!("22 degrees {unit} in {city}"))
 }

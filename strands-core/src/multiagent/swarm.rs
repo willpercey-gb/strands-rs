@@ -81,6 +81,7 @@ pub struct Swarm {
 }
 
 impl Swarm {
+    /// Start building one.
     pub fn builder() -> SwarmBuilder {
         SwarmBuilder::new()
     }
@@ -134,8 +135,9 @@ impl Swarm {
 
             // Check repetitive handoff detection
             if self.config.repetitive_handoff_detection_window > 0 {
-                let window = &execution_order
-                    [execution_order.len().saturating_sub(self.config.repetitive_handoff_detection_window)..];
+                let window = &execution_order[execution_order
+                    .len()
+                    .saturating_sub(self.config.repetitive_handoff_detection_window)..];
                 let unique: std::collections::HashSet<&String> = window.iter().collect();
                 if window.len() >= self.config.repetitive_handoff_detection_window
                     && unique.len() < self.config.repetitive_handoff_min_unique_agents
@@ -311,16 +313,16 @@ fn build_swarm_context(
 
 /// Parse a handoff instruction from the agent's response.
 /// Looks for "HANDOFF_TO: <agent_name> | <message>" pattern.
-fn parse_handoff(
-    response: &str,
-    nodes: &HashMap<String, SwarmNode>,
-) -> Option<(String, String)> {
+fn parse_handoff(response: &str, nodes: &HashMap<String, SwarmNode>) -> Option<(String, String)> {
     for line in response.lines().rev() {
         let line = line.trim();
         if let Some(rest) = line.strip_prefix("HANDOFF_TO:") {
             let rest = rest.trim();
             let (agent_name, message) = if let Some(pos) = rest.find('|') {
-                (rest[..pos].trim().to_string(), rest[pos + 1..].trim().to_string())
+                (
+                    rest[..pos].trim().to_string(),
+                    rest[pos + 1..].trim().to_string(),
+                )
             } else {
                 (rest.to_string(), String::new())
             };
@@ -341,6 +343,7 @@ pub struct SwarmBuilder {
 }
 
 impl SwarmBuilder {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self {
             agents: Vec::new(),
@@ -400,12 +403,12 @@ impl SwarmBuilder {
     /// Build the swarm.
     pub fn build(self) -> Result<Swarm, StrandsError> {
         if self.agents.is_empty() {
-            return Err(StrandsError::Other("Swarm requires at least one agent".into()));
+            return Err(StrandsError::Other(
+                "Swarm requires at least one agent".into(),
+            ));
         }
 
-        let entry_point = self
-            .entry_point
-            .unwrap_or_else(|| self.agents[0].0.clone());
+        let entry_point = self.entry_point.unwrap_or_else(|| self.agents[0].0.clone());
 
         let mut nodes = HashMap::new();
         for (id, description, agent) in self.agents {

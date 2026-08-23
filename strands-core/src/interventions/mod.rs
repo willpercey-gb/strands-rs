@@ -11,7 +11,9 @@
 //!
 //! Ported from upstream `interventions/` and `vended_interventions/`.
 
+/// Applying policy to tool execution.
 pub mod executor;
+/// Escalating risky calls to a human.
 pub mod hitl;
 
 use async_trait::async_trait;
@@ -27,18 +29,30 @@ pub enum InterventionAction {
     /// Let it proceed.
     Allow,
     /// Refuse, with a reason the model sees.
-    Deny { reason: String },
+    /// Refuse, with a reason the model sees.
+    Deny {
+        /// Why the call was refused.
+        reason: String,
+    },
     /// Pause and ask a human, under this interrupt name.
-    Escalate { name: String, reason: String },
+    /// Pause and ask a human.
+    Escalate {
+        /// Interrupt name the question is raised under.
+        name: String,
+        /// What the human is being asked to decide.
+        reason: String,
+    },
 }
 
 impl InterventionAction {
+    /// Refuse with a reason.
     pub fn deny(reason: impl Into<String>) -> Self {
         InterventionAction::Deny {
             reason: reason.into(),
         }
     }
 
+    /// Escalate to a human under `name`.
     pub fn escalate(name: impl Into<String>, reason: impl Into<String>) -> Self {
         InterventionAction::Escalate {
             name: name.into(),
@@ -46,6 +60,7 @@ impl InterventionAction {
         }
     }
 
+    /// Whether this decision permits the call.
     pub fn is_allow(&self) -> bool {
         matches!(self, InterventionAction::Allow)
     }
@@ -54,7 +69,9 @@ impl InterventionAction {
 /// The action being judged.
 #[derive(Debug, Clone)]
 pub struct InterventionContext {
+    /// Tool the model wants to call.
     pub tool_name: String,
+    /// Arguments it supplied.
     pub input: Value,
 }
 
@@ -78,18 +95,22 @@ pub struct InterventionRegistry {
 }
 
 impl InterventionRegistry {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Append a handler. Order matters — see [`evaluate`](Self::evaluate).
     pub fn register(&mut self, handler: impl InterventionHandler + 'static) {
         self.handlers.push(Box::new(handler));
     }
 
+    /// Number of entries.
     pub fn len(&self) -> usize {
         self.handlers.len()
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.handlers.is_empty()
     }
@@ -129,6 +150,7 @@ pub struct DenyList {
 }
 
 impl DenyList {
+    /// Create a new instance.
     pub fn new<I, S>(tools: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -142,6 +164,7 @@ impl DenyList {
 
 #[async_trait]
 impl InterventionHandler for DenyList {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "deny_list"
     }
@@ -164,6 +187,7 @@ pub struct AllowList {
 }
 
 impl AllowList {
+    /// Create a new instance.
     pub fn new<I, S>(tools: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -177,6 +201,7 @@ impl AllowList {
 
 #[async_trait]
 impl InterventionHandler for AllowList {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "allow_list"
     }

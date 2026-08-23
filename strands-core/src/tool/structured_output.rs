@@ -46,11 +46,8 @@ pub struct StructuredOutputSpec {
 }
 
 impl StructuredOutputSpec {
-    pub fn new(
-        name: impl Into<String>,
-        description: impl Into<String>,
-        schema: Value,
-    ) -> Self {
+    /// Create a new instance.
+    pub fn new(name: impl Into<String>, description: impl Into<String>, schema: Value) -> Self {
         Self {
             name: name.into(),
             description: description.into(),
@@ -99,6 +96,7 @@ impl<T> Default for StructuredOutputSlot<T> {
 }
 
 impl<T> StructuredOutputSlot<T> {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self {
             value: Arc::new(Mutex::new(None)),
@@ -130,6 +128,7 @@ pub struct StructuredOutputTool<T> {
 }
 
 impl<T> StructuredOutputTool<T> {
+    /// Create a new instance.
     pub fn new(spec: StructuredOutputSpec, slot: StructuredOutputSlot<T>) -> Self {
         Self {
             spec,
@@ -144,6 +143,7 @@ impl<T> Tool for StructuredOutputTool<T>
 where
     T: DeserializeOwned + Send + Sync + 'static,
 {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         &self.spec.name
     }
@@ -294,6 +294,9 @@ mod tests {
             name: "a".into(),
             age: 1,
         });
-        assert!(slot.is_filled(), "a clone must write through to the original");
+        assert!(
+            slot.is_filled(),
+            "a clone must write through to the original"
+        );
     }
 }

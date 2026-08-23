@@ -22,20 +22,24 @@ pub struct StopSignal {
 }
 
 impl StopSignal {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Whether the model has called the stop tool.
     /// Whether the model has called the stop tool.
     pub fn is_stopped(&self) -> bool {
         self.stopped.load(Ordering::Relaxed)
     }
 
     /// The reason the model gave, if any.
+    /// The reason the model gave, if any.
     pub fn reason(&self) -> Option<String> {
         self.reason.lock().ok()?.clone()
     }
 
+    /// Clear the signal, so the same agent can be reused.
     /// Clear the signal, so the same agent can be reused.
     pub fn reset(&self) {
         self.stopped.store(false, Ordering::Relaxed);
@@ -52,11 +56,13 @@ pub struct StopTool {
 }
 
 impl StopTool {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
 
     /// A handle to observe whether the model has stopped.
+    /// A handle for observing whether the model has stopped.
     pub fn signal(&self) -> StopSignal {
         self.signal.clone()
     }

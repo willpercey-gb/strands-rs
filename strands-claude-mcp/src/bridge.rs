@@ -9,7 +9,7 @@ use tokio::net::TcpListener;
 use crate::{port_for, BridgeRequest, ToolRegistry};
 
 /// In-process TCP bridge that exposes a set of strands `Tool`s to the
-/// [`crate::install`]-registered shim binary.
+/// [`mod@crate::install`]-registered shim binary.
 ///
 /// One bridge per host app. Cheap to clone.
 #[derive(Clone)]
@@ -90,7 +90,10 @@ impl Bridge {
     pub async fn serve(&self) -> std::io::Result<()> {
         let addr = format!("127.0.0.1:{}", self.port);
         let listener = TcpListener::bind(&addr).await?;
-        tracing::info!("strands-claude-mcp bridge `{}` listening on {addr}", self.name);
+        tracing::info!(
+            "strands-claude-mcp bridge `{}` listening on {addr}",
+            self.name
+        );
 
         loop {
             let (stream, peer) = listener.accept().await?;
@@ -129,8 +132,8 @@ async fn handle_connection(
                 json!({ "result": result })
             }
         };
-        let mut out = serde_json::to_string(&response)
-            .unwrap_or_else(|_| r#"{"error":"serialize"}"#.into());
+        let mut out =
+            serde_json::to_string(&response).unwrap_or_else(|_| r#"{"error":"serialize"}"#.into());
         out.push('\n');
         if writer.write_all(out.as_bytes()).await.is_err() {
             break;

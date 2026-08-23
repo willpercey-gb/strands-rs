@@ -1,7 +1,7 @@
 //! Checkpointing — durably persisting an agent mid-run so it can be resumed
 //! elsewhere.
 //!
-//! A checkpoint is a [`Snapshot`] taken at a turn boundary. Turn boundaries are
+//! A checkpoint is a [`Snapshot`](crate::session::Snapshot) taken at a turn boundary. Turn boundaries are
 //! the only safe point: mid-batch, the history holds a `ToolUse` whose
 //! `ToolResult` does not exist yet, and restoring from there would resume into a
 //! conversation the provider rejects.
@@ -49,6 +49,7 @@ pub struct Checkpointer {
 }
 
 impl Checkpointer {
+    /// Create a new instance.
     pub fn new(
         store: Arc<dyn SnapshotStore>,
         session_id: impl Into<String>,
@@ -62,11 +63,13 @@ impl Checkpointer {
         }
     }
 
+    /// Set the policy.
     pub fn with_policy(mut self, policy: CheckpointPolicy) -> Self {
         self.policy = policy;
         self
     }
 
+    /// The configured policy.
     pub fn policy(&self) -> CheckpointPolicy {
         self.policy
     }
@@ -199,10 +202,18 @@ mod tests {
         let cp = Checkpointer::new(store.clone(), "s", "a")
             .with_policy(CheckpointPolicy::EveryNTurns(2));
 
-        assert!(cp.maybe_checkpoint(1, &[], &state()).await.unwrap().is_none());
+        assert!(cp
+            .maybe_checkpoint(1, &[], &state())
+            .await
+            .unwrap()
+            .is_none());
         assert_eq!(store.len().await, 0);
 
-        assert!(cp.maybe_checkpoint(2, &[], &state()).await.unwrap().is_some());
+        assert!(cp
+            .maybe_checkpoint(2, &[], &state())
+            .await
+            .unwrap()
+            .is_some());
         assert_eq!(store.len().await, 1);
     }
 

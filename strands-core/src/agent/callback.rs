@@ -6,6 +6,7 @@ use crate::types::streaming::StreamEvent;
 /// before they're accumulated into content blocks. Useful for updating UIs
 /// in real-time as text or tool calls stream in.
 pub trait CallbackHandler: Send + Sync {
+    /// Called for each event as it arrives from the model.
     fn on_stream_event(&self, event: &StreamEvent);
 }
 

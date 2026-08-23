@@ -15,7 +15,9 @@
 
 use serde::Deserialize;
 use strands_core::types::message::Role;
-use strands_core::types::streaming::{ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage};
+use strands_core::types::streaming::{
+    ContentBlockType, DeltaContent, Metrics, StopReason, StreamEvent, Usage,
+};
 
 #[derive(Default)]
 pub(crate) struct GeminiCliState {
@@ -113,9 +115,7 @@ impl GeminiCliState {
             // turn as a single event (or a final "complete" message
             // after streaming). If we already streamed deltas with the
             // same content, only emit the remaining tail.
-            let to_emit = if self.saw_assistant_chunk
-                && content.starts_with(&self.emitted_text)
-            {
+            let to_emit = if self.saw_assistant_chunk && content.starts_with(&self.emitted_text) {
                 &content[self.emitted_text.len()..]
             } else {
                 content
@@ -233,11 +233,21 @@ mod tests {
         assert_eq!(assembled(&events), "Hello there");
         assert!(events.iter().any(|e| matches!(
             e,
-            StreamEvent::Metadata { usage: Usage { input_tokens: Some(7), output_tokens: Some(2), .. }, .. }
+            StreamEvent::Metadata {
+                usage: Usage {
+                    input_tokens: Some(7),
+                    output_tokens: Some(2),
+                    ..
+                },
+                ..
+            }
         )));
-        assert!(events
-            .iter()
-            .any(|e| matches!(e, StreamEvent::MessageStop { stop_reason: StopReason::EndTurn })));
+        assert!(events.iter().any(|e| matches!(
+            e,
+            StreamEvent::MessageStop {
+                stop_reason: StopReason::EndTurn
+            }
+        )));
     }
 
     #[test]

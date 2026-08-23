@@ -1,7 +1,7 @@
 //! Model routing — choosing which model serves a call, and what to do when it
 //! fails.
 //!
-//! Implemented as [`Middleware`] over the model stage rather than as a wrapper
+//! Implemented as [`Middleware`](crate::middleware::Middleware) over the model stage rather than as a wrapper
 //! `Model`, because routing needs the *request* to decide: message count, tool
 //! specs, which cycle this is. A `Model` impl only sees its own arguments and
 //! cannot short-circuit or retry the surrounding call.
@@ -24,6 +24,7 @@ pub trait RoutingStrategy: Send + Sync {
     /// Pick a model for this request, or `None` to keep the current one.
     fn select(&self, ctx: &InvokeModelContext) -> Option<Arc<dyn Model>>;
 
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "routing"
     }
@@ -35,6 +36,7 @@ pub struct StaticStrategy {
 }
 
 impl StaticStrategy {
+    /// Create a new instance.
     pub fn new(model: Arc<dyn Model>) -> Self {
         Self { model }
     }
@@ -45,6 +47,7 @@ impl RoutingStrategy for StaticStrategy {
         Some(self.model.clone())
     }
 
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "static"
     }
@@ -60,6 +63,7 @@ impl<F> PredicateStrategy<F>
 where
     F: Fn(&InvokeModelContext) -> bool + Send + Sync,
 {
+    /// Create a new instance.
     pub fn new(model: Arc<dyn Model>, predicate: F) -> Self {
         Self { predicate, model }
     }
@@ -73,6 +77,7 @@ where
         (self.predicate)(ctx).then(|| self.model.clone())
     }
 
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "predicate"
     }
@@ -84,6 +89,7 @@ pub struct ModelRouter {
 }
 
 impl ModelRouter {
+    /// Create a new instance.
     pub fn new(strategy: impl RoutingStrategy + 'static) -> Self {
         Self {
             strategy: Box::new(strategy),
@@ -125,6 +131,7 @@ pub struct FallbackStrategy {
 }
 
 impl FallbackStrategy {
+    /// Create a new instance.
     pub fn new(fallbacks: Vec<Arc<dyn Model>>) -> Self {
         Self { fallbacks }
     }
@@ -275,7 +282,10 @@ mod tests {
             )
         }
 
-        fn failing(id: &'static str, e: fn() -> StrandsError) -> (Arc<dyn Model>, Arc<AtomicUsize>) {
+        fn failing(
+            id: &'static str,
+            e: fn() -> StrandsError,
+        ) -> (Arc<dyn Model>, Arc<AtomicUsize>) {
             let calls = Arc::new(AtomicUsize::new(0));
             (
                 Arc::new(NamedModel {
@@ -425,8 +435,7 @@ mod tests {
     #[tokio::test]
     async fn fallback_tries_each_model_in_order() {
         let (primary, _) = NamedModel::failing("primary", || StrandsError::Model("a".into()));
-        let (first, first_calls) =
-            NamedModel::failing("first", || StrandsError::Model("b".into()));
+        let (first, first_calls) = NamedModel::failing("first", || StrandsError::Model("b".into()));
         let (second, second_calls) = NamedModel::ok("second");
 
         let terminal = CallCtxModel;

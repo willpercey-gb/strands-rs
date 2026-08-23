@@ -119,10 +119,12 @@ impl BridgeClient {
 
     pub fn call(&self, req: &BridgeRequest) -> Result<Value, String> {
         let mut stream = TcpStream::connect(&self.addr).map_err(|e| {
-            format!("connect to bridge {}: {e} (is the host app running?)", self.addr)
+            format!(
+                "connect to bridge {}: {e} (is the host app running?)",
+                self.addr
+            )
         })?;
-        let mut line = serde_json::to_string(req)
-            .map_err(|e| format!("encode request: {e}"))?;
+        let mut line = serde_json::to_string(req).map_err(|e| format!("encode request: {e}"))?;
         line.push('\n');
         stream
             .write_all(line.as_bytes())
@@ -135,8 +137,8 @@ impl BridgeClient {
         reader
             .read_line(&mut response)
             .map_err(|e| format!("read from bridge: {e}"))?;
-        let parsed: Value = serde_json::from_str(&response)
-            .map_err(|e| format!("parse bridge response: {e}"))?;
+        let parsed: Value =
+            serde_json::from_str(&response).map_err(|e| format!("parse bridge response: {e}"))?;
         if let Some(err) = parsed.get("error").and_then(|e| e.as_str()) {
             return Err(err.to_string());
         }
@@ -206,7 +208,12 @@ pub fn cargo_target_candidates() -> Vec<PathBuf> {
     let mut out = vec![];
     if let Some(workspace) = manifest.parent() {
         for profile in ["debug", "release"] {
-            out.push(workspace.join("target").join(profile).join("strands-claude-mcp-shim"));
+            out.push(
+                workspace
+                    .join("target")
+                    .join(profile)
+                    .join("strands-claude-mcp-shim"),
+            );
         }
     }
     out
@@ -215,7 +222,10 @@ pub fn cargo_target_candidates() -> Vec<PathBuf> {
 /// Locate the `claude` CLI on the user's PATH. Returned as the absolute path
 /// so callers can log it; failures here are usually a missing install.
 pub fn find_claude_cli() -> Option<PathBuf> {
-    let out = Command::new("sh").args(["-lc", "command -v claude"]).output().ok()?;
+    let out = Command::new("sh")
+        .args(["-lc", "command -v claude"])
+        .output()
+        .ok()?;
     if !out.status.success() {
         return None;
     }

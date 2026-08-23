@@ -244,8 +244,14 @@ fn parse_argument_docs(lines: &[String]) -> Vec<(String, String)> {
 
         if let Some(heading) = trimmed.strip_prefix('#') {
             // Any other heading ends the Arguments section.
-            in_arguments = heading.trim_start_matches('#').trim().eq_ignore_ascii_case("arguments")
-                || heading.trim_start_matches('#').trim().eq_ignore_ascii_case("args");
+            in_arguments = heading
+                .trim_start_matches('#')
+                .trim()
+                .eq_ignore_ascii_case("arguments")
+                || heading
+                    .trim_start_matches('#')
+                    .trim()
+                    .eq_ignore_ascii_case("args");
             continue;
         }
 
@@ -253,7 +259,10 @@ fn parse_argument_docs(lines: &[String]) -> Vec<(String, String)> {
             continue;
         }
 
-        let Some(item) = trimmed.strip_prefix('*').or_else(|| trimmed.strip_prefix('-')) else {
+        let Some(item) = trimmed
+            .strip_prefix('*')
+            .or_else(|| trimmed.strip_prefix('-'))
+        else {
             continue;
         };
         let item = item.trim();
@@ -298,7 +307,6 @@ fn extract_doc_lines(attrs: &[syn::Attribute]) -> Vec<String> {
         .collect()
 }
 
-
 fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {
         if let Some(segment) = type_path.path.segments.last() {
@@ -314,8 +322,9 @@ fn rust_type_to_json_type(ty: &syn::Type) -> String {
             let ident = segment.ident.to_string();
             return match ident.as_str() {
                 "String" | "str" => "string",
-                "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize"
-                | "usize" => "integer",
+                "i8" | "i16" | "i32" | "i64" | "u8" | "u16" | "u32" | "u64" | "isize" | "usize" => {
+                    "integer"
+                }
                 "f32" | "f64" => "number",
                 "bool" => "boolean",
                 "Vec" => "array",

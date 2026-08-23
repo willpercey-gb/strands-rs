@@ -1,6 +1,6 @@
-use strands_core::types::content::SystemPrompt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use strands_core::types::content::SystemPrompt;
 
 use async_trait::async_trait;
 use futures::stream;
@@ -125,20 +125,20 @@ impl Tool for GreetTool {
     }
 
     fn spec(&self) -> ToolSpec {
-        ToolSpec::new("greet".to_string(), "Greet someone by name".to_string(), json!({
+        ToolSpec::new(
+            "greet".to_string(),
+            "Greet someone by name".to_string(),
+            json!({
                 "type": "object",
                 "properties": {
                     "name": { "type": "string" }
                 },
                 "required": ["name"]
-            }))
+            }),
+        )
     }
 
-    async fn invoke(
-        &self,
-        input: serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<ToolOutput> {
+    async fn invoke(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolOutput> {
         let name = input["name"].as_str().unwrap_or("stranger");
         Ok(ToolOutput::success(json!(format!("Hello, {name}!"))))
     }
@@ -287,8 +287,8 @@ async fn test_hooks_are_called() {
 
 #[tokio::test]
 async fn test_hook_cancel_tool() {
-    use strands_core::hooks::HookEvent;
     use strands_core::hooks::events::BeforeToolCallEvent;
+    use strands_core::hooks::HookEvent;
 
     // Model always requests the tool
     struct AlwaysToolModel;
@@ -303,12 +303,16 @@ async fn test_hook_cancel_tool() {
         ) -> Result<ModelStream> {
             // If we already have a tool result, just return text
             let has_tool_result = messages.iter().any(|m| {
-                m.content.iter().any(|c| matches!(c, ContentBlock::ToolResult { .. }))
+                m.content
+                    .iter()
+                    .any(|c| matches!(c, ContentBlock::ToolResult { .. }))
             });
 
             if has_tool_result {
                 let events = vec![
-                    Ok(StreamEvent::MessageStart { role: Role::Assistant }),
+                    Ok(StreamEvent::MessageStart {
+                        role: Role::Assistant,
+                    }),
                     Ok(StreamEvent::ContentBlockStart {
                         index: 0,
                         content_type: ContentBlockType::Text,
@@ -318,18 +322,22 @@ async fn test_hook_cancel_tool() {
                         delta: DeltaContent::TextDelta("done".to_string()),
                     }),
                     Ok(StreamEvent::ContentBlockStop { index: 0 }),
-                    Ok(StreamEvent::MessageStop { stop_reason: StopReason::EndTurn }),
+                    Ok(StreamEvent::MessageStop {
+                        stop_reason: StopReason::EndTurn,
+                    }),
                 ];
                 Ok(Box::pin(stream::iter(events)))
             } else {
                 let events = vec![
-                    Ok(StreamEvent::MessageStart { role: Role::Assistant }),
+                    Ok(StreamEvent::MessageStart {
+                        role: Role::Assistant,
+                    }),
                     Ok(StreamEvent::ContentBlockStart {
                         index: 0,
                         content_type: ContentBlockType::ToolUse {
                             tool_use_id: "call_1".to_string(),
                             name: "greet".to_string(),
-                        reasoning_signature: None,
+                            reasoning_signature: None,
                         },
                     }),
                     Ok(StreamEvent::ContentBlockDelta {
@@ -337,7 +345,9 @@ async fn test_hook_cancel_tool() {
                         delta: DeltaContent::ToolInputDelta(r#"{"name":"test"}"#.to_string()),
                     }),
                     Ok(StreamEvent::ContentBlockStop { index: 0 }),
-                    Ok(StreamEvent::MessageStop { stop_reason: StopReason::ToolUse }),
+                    Ok(StreamEvent::MessageStop {
+                        stop_reason: StopReason::ToolUse,
+                    }),
                 ];
                 Ok(Box::pin(stream::iter(events)))
             }
@@ -442,18 +452,18 @@ async fn test_concurrent_tool_retry_reuses_original_input() {
         }
 
         fn spec(&self) -> ToolSpec {
-            ToolSpec::new("greet".to_string(), "Greet someone by name".to_string(), json!({
+            ToolSpec::new(
+                "greet".to_string(),
+                "Greet someone by name".to_string(),
+                json!({
                     "type": "object",
                     "properties": { "name": { "type": "string" } },
                     "required": ["name"]
-                }))
+                }),
+            )
         }
 
-        async fn invoke(
-            &self,
-            input: serde_json::Value,
-            _ctx: &ToolContext,
-        ) -> Result<ToolOutput> {
+        async fn invoke(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolOutput> {
             self.seen.lock().unwrap().push(input.clone());
             Ok(ToolOutput::success(json!("ok")))
         }
@@ -541,9 +551,7 @@ async fn test_hook_model_retry_is_bounded() {
     }
 
     let mut agent = Agent::builder()
-        .model(CountingModel {
-            calls: calls_model,
-        })
+        .model(CountingModel { calls: calls_model })
         .retry_config(RetryConfig {
             max_hook_retries: 2,
             ..Default::default()
@@ -559,12 +567,9 @@ async fn test_hook_model_retry_is_bounded() {
 
     // Bounded by the runtime, not by the test: if the guard regresses this
     // never returns.
-    let result = tokio::time::timeout(
-        std::time::Duration::from_secs(5),
-        agent.prompt("hello"),
-    )
-    .await
-    .expect("agent loop did not terminate: hook retries are unbounded");
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), agent.prompt("hello"))
+        .await
+        .expect("agent loop did not terminate: hook retries are unbounded");
 
     result.unwrap();
     assert_eq!(
@@ -673,7 +678,10 @@ async fn test_assistant_message_records_its_own_usage() {
         .find(|m| m.role == Role::Assistant)
         .expect("assistant message present");
     assert!(
-        assistant.metadata.as_ref().is_some_and(|m| m.usage.is_some()),
+        assistant
+            .metadata
+            .as_ref()
+            .is_some_and(|m| m.usage.is_some()),
         "the assistant message should carry the usage of the call that produced it"
     );
 }
@@ -705,7 +713,11 @@ async fn test_structured_system_prompt_reaches_the_model_with_cache_points() {
     let (text, blocks) = system.split();
 
     assert_eq!(text.as_deref(), Some("long standing instructions"));
-    assert_eq!(blocks.len(), 2, "the cache point must survive to the adapter");
+    assert_eq!(
+        blocks.len(),
+        2,
+        "the cache point must survive to the adapter"
+    );
     assert!(matches!(blocks[1], SystemContentBlock::CachePoint(_)));
 }
 
@@ -809,11 +821,7 @@ async fn test_before_tools_can_cancel_the_whole_batch() {
         fn spec(&self) -> ToolSpec {
             ToolSpec::new("greet", "greet", json!({"type": "object"}))
         }
-        async fn invoke(
-            &self,
-            input: serde_json::Value,
-            _ctx: &ToolContext,
-        ) -> Result<ToolOutput> {
+        async fn invoke(&self, input: serde_json::Value, _ctx: &ToolContext) -> Result<ToolOutput> {
             self.seen.lock().unwrap().push(input);
             Ok(ToolOutput::success(json!("ran")))
         }
@@ -1277,10 +1285,7 @@ async fn test_structured_output_returns_a_typed_value() {
 async fn test_structured_output_lets_the_model_correct_itself() {
     // First attempt omits a required field; the validation error goes back to
     // the model, which fixes it on the next turn.
-    let mut agent = structured_agent(vec![
-        r#"{"name":"Ada"}"#,
-        r#"{"name":"Ada","age":36}"#,
-    ]);
+    let mut agent = structured_agent(vec![r#"{"name":"Ada"}"#, r#"{"name":"Ada","age":36}"#]);
 
     let person: Person = agent
         .prompt_structured("describe Ada", person_spec())
@@ -1724,10 +1729,10 @@ async fn test_model_middleware_can_swap_the_model_for_one_call() {
 
 #[tokio::test]
 async fn test_telemetry_records_cycles_and_tool_calls() {
+    use std::sync::Mutex;
     use strands_core::hooks::events::AfterToolCallEvent;
     use strands_core::hooks::HookEvent;
     use strands_core::MetricsCollector;
-    use std::sync::Mutex;
 
     let collector = Arc::new(Mutex::new(MetricsCollector::new()));
     let collector_hook = collector.clone();
@@ -1937,7 +1942,9 @@ async fn test_shared_context_delegation_seeds_the_sub_agent() {
         .build()
         .unwrap();
 
-    let tool = sub.as_tool("reviewer", "Reviews work").with_shared_context();
+    let tool = sub
+        .as_tool("reviewer", "Reviews work")
+        .with_shared_context();
     assert_eq!(tool.mode(), DelegationMode::SharedContext);
 
     tool.share_context(vec![Message::user("earlier context")])

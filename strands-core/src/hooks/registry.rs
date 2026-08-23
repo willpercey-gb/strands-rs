@@ -25,6 +25,7 @@ pub mod order {
 /// Hooks receive mutable references to events, allowing them to
 /// modify writable fields (e.g., cancel tool calls, retry model calls).
 pub trait Hook: Send + Sync {
+    /// Called for each lifecycle event. Write to the event to steer the run.
     fn on_event(&self, event: &mut HookEvent);
 }
 
@@ -50,6 +51,7 @@ pub struct HookRegistry {
 }
 
 impl HookRegistry {
+    /// Create with default settings.
     pub fn new() -> Self {
         Self::default()
     }
@@ -94,6 +96,7 @@ impl HookRegistry {
         self.entries.len()
     }
 
+    /// Whether there are no entries.
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }

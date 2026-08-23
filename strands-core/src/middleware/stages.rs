@@ -45,9 +45,13 @@ impl std::fmt::Debug for InvokeModelContext {
 /// What one model call produced.
 #[derive(Debug, Clone)]
 pub struct ModelCallOutcome {
+    /// Blocks the model produced.
     pub content: Vec<ContentBlock>,
+    /// Why it stopped.
     pub stop_reason: StopReason,
+    /// Tokens consumed.
     pub usage: Usage,
+    /// Latency figures.
     pub metrics: Metrics,
 }
 
@@ -72,8 +76,11 @@ pub type InvokeModelResult = Result<ModelCallOutcome, StrandsError>;
 /// mutating what the model actually asked for in the history.
 #[derive(Debug, Clone)]
 pub struct ExecuteToolContext {
+    /// Identifier the result must echo back.
     pub tool_use_id: String,
+    /// Tool being called.
     pub tool_name: String,
+    /// Arguments, rewritable by middleware.
     pub input: serde_json::Value,
 }
 

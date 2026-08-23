@@ -22,6 +22,7 @@ pub struct MemoryManager {
 }
 
 impl MemoryManager {
+    /// Create a new instance.
     pub fn new(store: Arc<dyn MemoryStore>) -> Self {
         Self {
             store,
@@ -31,16 +32,19 @@ impl MemoryManager {
         }
     }
 
+    /// Set the extractor.
     pub fn with_extractor(mut self, extractor: Arc<dyn MemoryExtractor>) -> Self {
         self.extractor = extractor;
         self
     }
 
+    /// Set the config.
     pub fn with_config(mut self, config: ExtractionConfig) -> Self {
         self.config = config;
         self
     }
 
+    /// The backing store.
     pub fn store(&self) -> &Arc<dyn MemoryStore> {
         &self.store
     }
@@ -174,8 +178,9 @@ mod tests {
     #[tokio::test]
     async fn the_trigger_is_honoured() {
         let store = Arc::new(InMemoryMemoryStore::default());
-        let manager = MemoryManager::new(store.clone())
-            .with_config(ExtractionConfig::default().with_trigger(ExtractionTrigger::MessageCount(3)));
+        let manager = MemoryManager::new(store.clone()).with_config(
+            ExtractionConfig::default().with_trigger(ExtractionTrigger::MessageCount(3)),
+        );
 
         let messages = vec![Message::user("a"), Message::user("b")];
         assert_eq!(manager.maybe_extract(&messages).await.unwrap(), 0);
@@ -249,6 +254,10 @@ mod tests {
         manager.reset();
         manager.maybe_extract(&messages).await.unwrap();
 
-        assert_eq!(store.len().await, 2, "after a reset the message is seen again");
+        assert_eq!(
+            store.len().await,
+            2,
+            "after a reset the message is seen again"
+        );
     }
 }

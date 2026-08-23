@@ -22,6 +22,7 @@ pub struct MemoryRecord {
 }
 
 impl MemoryRecord {
+    /// Create a new instance.
     pub fn new(content: impl Into<String>) -> Self {
         Self {
             id: uuid::Uuid::new_v4().to_string(),
@@ -31,6 +32,7 @@ impl MemoryRecord {
         }
     }
 
+    /// Set the metadata.
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self
@@ -40,6 +42,7 @@ impl MemoryRecord {
 /// A search against a store.
 #[derive(Debug, Clone)]
 pub struct SearchQuery {
+    /// What to search for.
     pub text: String,
     /// Cap on results. `None` uses the store's configured default.
     pub max_results: Option<usize>,
@@ -48,6 +51,7 @@ pub struct SearchQuery {
 }
 
 impl SearchQuery {
+    /// Create a new instance.
     pub fn new(text: impl Into<String>) -> Self {
         Self {
             text: text.into(),
@@ -56,11 +60,13 @@ impl SearchQuery {
         }
     }
 
+    /// Set the max results.
     pub fn with_max_results(mut self, n: usize) -> Self {
         self.max_results = Some(n);
         self
     }
 
+    /// Set the min score.
     pub fn with_min_score(mut self, score: f32) -> Self {
         self.min_score = Some(score);
         self
@@ -70,6 +76,7 @@ impl SearchQuery {
 /// A record matched by a search, with its relevance.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SearchResult {
+    /// The matched record.
     pub record: MemoryRecord,
     /// Relevance in `[0, 1]`. Higher is more relevant.
     pub score: f32,
@@ -130,10 +137,8 @@ pub trait MemoryStore: Send + Sync {
             if text.is_empty() {
                 continue;
             }
-            self.add(
-                MemoryRecord::new(text).with_metadata("role", format!("{:?}", message.role)),
-            )
-            .await?;
+            self.add(MemoryRecord::new(text).with_metadata("role", format!("{:?}", message.role)))
+                .await?;
             stored += 1;
         }
         Ok(stored)
@@ -162,6 +167,7 @@ impl Default for InMemoryMemoryStore {
 }
 
 impl InMemoryMemoryStore {
+    /// Create a new instance.
     pub fn new(config: MemoryStoreConfig) -> Self {
         Self {
             config,
@@ -169,10 +175,12 @@ impl InMemoryMemoryStore {
         }
     }
 
+    /// Number of entries.
     pub async fn len(&self) -> usize {
         self.records.read().await.len()
     }
 
+    /// Whether there are no entries.
     pub async fn is_empty(&self) -> bool {
         self.records.read().await.is_empty()
     }
@@ -199,9 +207,7 @@ impl MemoryStore for InMemoryMemoryStore {
     }
 
     async fn search(&self, query: &SearchQuery) -> Result<Vec<SearchResult>, StrandsError> {
-        let limit = query
-            .max_results
-            .unwrap_or(self.config.max_search_results);
+        let limit = query.max_results.unwrap_or(self.config.max_search_results);
         let floor = query.min_score.unwrap_or(f32::EPSILON);
 
         let mut results: Vec<SearchResult> = self
@@ -333,10 +339,7 @@ mod tests {
     #[tokio::test]
     async fn add_messages_stores_text_and_skips_empty() {
         let store = InMemoryMemoryStore::default();
-        let messages = vec![
-            Message::user("remember this"),
-            Message::assistant(vec![]),
-        ];
+        let messages = vec![Message::user("remember this"), Message::assistant(vec![])];
 
         let stored = store.add_messages(&messages).await.unwrap();
         assert_eq!(stored, 1, "an empty message contributes nothing to memory");

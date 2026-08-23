@@ -11,14 +11,19 @@ use super::{InterventionAction, InterventionContext, InterventionHandler};
 
 /// How dangerous a proposed action looks.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+/// How dangerous a proposed action looks.
 pub enum RiskLevel {
+    /// Routine; no approval needed.
     Low,
+    /// Worth attention.
     Medium,
+    /// Should not proceed without a human.
     High,
 }
 
 /// Judges the risk of a proposed tool call.
 pub trait RiskClassifier: Send + Sync {
+    /// Judge the risk of a proposed call.
     fn classify(&self, ctx: &InterventionContext) -> RiskLevel;
 }
 
@@ -34,6 +39,7 @@ pub struct ToolNameClassifier {
 }
 
 impl ToolNameClassifier {
+    /// Create a new instance.
     pub fn new<I, S>(high_risk: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -46,6 +52,7 @@ impl ToolNameClassifier {
     }
 
     /// Treat unlisted tools as this risky.
+    /// Set the default risk.
     pub fn with_default_risk(mut self, risk: RiskLevel) -> Self {
         self.default_risk = risk;
         self
@@ -69,6 +76,7 @@ pub struct HumanInTheLoop {
 }
 
 impl HumanInTheLoop {
+    /// Create a new instance.
     pub fn new(classifier: impl RiskClassifier + 'static) -> Self {
         Self {
             classifier: Box::new(classifier),
@@ -77,6 +85,7 @@ impl HumanInTheLoop {
     }
 
     /// Escalate at or above `threshold`.
+    /// Set the threshold.
     pub fn with_threshold(mut self, threshold: RiskLevel) -> Self {
         self.threshold = threshold;
         self
@@ -94,6 +103,7 @@ impl HumanInTheLoop {
 
 #[async_trait]
 impl InterventionHandler for HumanInTheLoop {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "human_in_the_loop"
     }

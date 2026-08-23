@@ -8,6 +8,10 @@
 //!
 //! Ported from upstream `vended_tools/`.
 
+// Public API must be documented: this crate is published, so anything
+// undocumented here shows up as a gap on docs.rs.
+#![warn(missing_docs)]
+
 #[cfg(feature = "file-editor")]
 pub mod file_editor;
 #[cfg(feature = "http")]

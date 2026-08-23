@@ -43,6 +43,7 @@ pub struct ContextOffloader {
 }
 
 impl ContextOffloader {
+    /// Create a new instance.
     pub fn new(storage: Arc<dyn Storage>) -> Self {
         Self {
             storage,
@@ -52,11 +53,13 @@ impl ContextOffloader {
         }
     }
 
+    /// Set the threshold.
     pub fn with_threshold(mut self, chars: usize) -> Self {
         self.threshold = chars;
         self
     }
 
+    /// Set the preview chars.
     pub fn with_preview_chars(mut self, chars: usize) -> Self {
         self.preview_chars = chars;
         self
@@ -66,6 +69,7 @@ impl ContextOffloader {
     ///
     /// Receives the tool name and the result text. Upstream v1.51's
     /// `should_offload` callback.
+    /// Set the should offload.
     pub fn with_should_offload(
         mut self,
         predicate: impl Fn(&str, &str) -> bool + Send + Sync + 'static,
@@ -90,9 +94,7 @@ impl ContextOffloader {
         text: &str,
     ) -> Result<String, StrandsError> {
         let key = format!("offload/{tool_use_id}");
-        self.storage
-            .write(&key, text.as_bytes().to_vec())
-            .await?;
+        self.storage.write(&key, text.as_bytes().to_vec()).await?;
 
         let preview: String = text.chars().take(self.preview_chars).collect();
         debug!(
@@ -128,6 +130,7 @@ pub struct RetrieveOffloadedTool {
 }
 
 impl RetrieveOffloadedTool {
+    /// Set the max chars.
     pub fn with_max_chars(mut self, chars: usize) -> Self {
         self.max_chars = chars;
         self
@@ -173,6 +176,7 @@ impl RetrieveOffloadedTool {
 
 #[async_trait]
 impl Tool for RetrieveOffloadedTool {
+    /// Name, for logs and diagnostics.
     fn name(&self) -> &str {
         "retrieve_offloaded"
     }
@@ -266,8 +270,8 @@ mod tests {
         // Size is not the only reason to offload — a result can be small but
         // sensitive, or large but needed in full.
         let (_, storage) = offloader();
-        let offloader = ContextOffloader::new(storage)
-            .with_should_offload(|tool, _| tool == "always_offload");
+        let offloader =
+            ContextOffloader::new(storage).with_should_offload(|tool, _| tool == "always_offload");
 
         assert!(offloader.should_offload("always_offload", "tiny"));
         assert!(!offloader.should_offload("other", &"x".repeat(100_000)));
@@ -278,7 +282,10 @@ mod tests {
         let (offloader, storage) = offloader();
         let content = "line one\nline two\n".repeat(100);
 
-        let replacement = offloader.offload("search", "call_1", &content).await.unwrap();
+        let replacement = offloader
+            .offload("search", "call_1", &content)
+            .await
+            .unwrap();
 
         assert!(replacement.contains("offload/call_1"), "{replacement}");
         assert!(replacement.contains("retrieve_offloaded"));
@@ -294,7 +301,10 @@ mod tests {
     #[tokio::test]
     async fn retrieval_reads_the_content_back() {
         let (offloader, _) = offloader();
-        offloader.offload("t", "call_1", "the full content").await.unwrap();
+        offloader
+            .offload("t", "call_1", "the full content")
+            .await
+            .unwrap();
 
         let out = offloader
             .retrieval_tool()
@@ -334,15 +344,27 @@ mod tests {
 
         let text = out.content.as_str().unwrap();
         assert!(text.contains("TARGET here"), "{text}");
-        assert!(text.contains("beta"), "context line before should be included");
-        assert!(text.contains("delta"), "context line after should be included");
-        assert!(!text.contains("alpha"), "unrelated lines should be excluded");
+        assert!(
+            text.contains("beta"),
+            "context line before should be included"
+        );
+        assert!(
+            text.contains("delta"),
+            "context line after should be included"
+        );
+        assert!(
+            !text.contains("alpha"),
+            "unrelated lines should be excluded"
+        );
     }
 
     #[tokio::test]
     async fn search_reports_when_nothing_matches() {
         let (offloader, _) = offloader();
-        offloader.offload("t", "call_1", "nothing here").await.unwrap();
+        offloader
+            .offload("t", "call_1", "nothing here")
+            .await
+            .unwrap();
 
         let out = offloader
             .retrieval_tool()
@@ -373,7 +395,10 @@ mod tests {
 
         let text = out.content.as_str().unwrap();
         assert!(text.contains("truncated"));
-        assert!(text.contains("search term"), "should advise how to narrow it");
+        assert!(
+            text.contains("search term"),
+            "should advise how to narrow it"
+        );
     }
 
     #[test]
