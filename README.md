@@ -2,9 +2,10 @@
 
 A Rust port of the [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python) — a model-driven framework for building AI agents that reason and act through tool use.
 
-> Aligned with upstream `python/v1.53.0`. See [`UPSTREAM.md`](UPSTREAM.md) for the
-> sync marker and [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md)
-> for the per-feature status.
+> Measured against upstream `python/v1.53.0` — **59 of 80 tracked features**, not
+> full parity. See [`UPSTREAM.md`](UPSTREAM.md) for the sync marker and
+> [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md) for every
+> gap and its reason.
 
 ## Features
 

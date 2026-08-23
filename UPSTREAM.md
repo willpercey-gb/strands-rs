@@ -1,24 +1,30 @@
 # Upstream Sync Marker
 
 strands-rs is a Rust port of the [AWS Strands Agents SDK](https://github.com/strands-agents/sdk-python).
-This file records exactly which upstream state the port is aligned to, so the next
-sync is a diff rather than an archaeology dig.
+This file records exactly which upstream state the port is measured against, so
+the next sync is a diff rather than an archaeology dig.
 
 ## Current alignment
+
+**strands-rs is not at feature parity with upstream, and is not trying to
+claim it.** It is *measured against* a known upstream release, with every gap
+recorded. Read the two rows below together — the tag says what we are compared
+to, not what we contain.
 
 | Field | Value |
 |-------|-------|
 | Upstream repo | `https://github.com/strands-agents/sdk-python` |
-| Aligned to tag | `python/v1.53.0` |
+| Measured against tag | `python/v1.53.0` |
 | Tag commit | `bc37995231143870c649a5c43fbdf798f5517786` |
 | Tag date | 2026-08-20 |
-| Sync status | 59/80 tracked items landed — see [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md) for what remains and why |
+| Feature coverage | **59 of 80 tracked items.** 21 outstanding, each with a recorded reason — see [`docs/12-upstream-sync-ledger.md`](docs/12-upstream-sync-ledger.md) |
+| Architectural alignment | Core shapes match upstream: content/message types, the model trait, tool executors, middleware, interrupts, storage, memory |
 
-### Previous alignment
+### Previously measured against
 
 | Field | Value |
 |-------|-------|
-| Aligned to tag | `python/v1.37.0` |
+| Measured against tag | `python/v1.37.0` |
 | Tag commit | `50439e01514c9a8bf59ca041a2699367a0263a17` |
 | Tag date | 2026-04-22 |
 
