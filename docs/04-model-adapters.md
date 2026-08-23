@@ -10,7 +10,7 @@ pub trait Model: Send + Sync {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         tool_specs: &[ToolSpec],
     ) -> Result<ModelStream, StrandsError>;
 }
@@ -67,7 +67,7 @@ impl Model for MyModel {
     async fn stream(
         &self,
         messages: &[Message],
-        system_prompt: Option<&str>,
+        system_prompt: Option<&SystemPrompt>,
         tool_specs: &[ToolSpec],
     ) -> Result<ModelStream> {
         // 1. Convert messages to your provider's format

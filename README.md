@@ -119,6 +119,8 @@ impl Model for MyModel {
 
 Full user guide in [`docs/`](docs/):
 
+**Core**
+
 1. [Quickstart](docs/01-quickstart.md)
 2. [Agent Loop](docs/02-agent-loop.md)
 3. [Tools](docs/03-tools.md)
@@ -130,6 +132,25 @@ Full user guide in [`docs/`](docs/):
 9. [Plugins](docs/09-plugins.md)
 10. [Streaming](docs/10-streaming.md)
 11. [Claude MCP Bridge](docs/11-claude-mcp.md)
+
+**Extending the loop**
+
+13. [Middleware](docs/13-middleware.md)
+14. [Model Routing & Fallback](docs/14-model-routing.md)
+15. [Interrupts](docs/15-interrupts.md)
+16. [Interventions](docs/16-interventions.md)
+17. [Structured Output](docs/17-structured-output.md)
+
+**State & operations**
+
+18. [Memory & Storage](docs/18-memory-and-storage.md)
+19. [Telemetry](docs/19-telemetry.md)
+20. [Ready-Made Tools](docs/20-vended-tools.md)
+21. [Checkpointing](docs/21-checkpointing.md)
+
+**Project**
+
+12. [Upstream Sync Ledger](docs/12-upstream-sync-ledger.md) — what is and isn't ported
 
 ## License
 

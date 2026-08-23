@@ -39,3 +39,14 @@ pub use types::tools::ToolSpec;
 
 #[cfg(feature = "macros")]
 pub use strands_macros::tool;
+
+/// Re-exports the `#[tool]` macro expands to.
+///
+/// Not part of the public API. It exists so a user of the macro does not have
+/// to add `async_trait` to their own `Cargo.toml` just to satisfy code they
+/// never wrote.
+#[doc(hidden)]
+#[cfg(feature = "macros")]
+pub mod __macro_support {
+    pub use async_trait::async_trait;
+}

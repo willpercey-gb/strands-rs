@@ -72,9 +72,13 @@ For cleaner tool definitions, use the proc macro:
 ```rust
 use strands_core::tool;
 
+/// Get the current weather for a city.
+///
+/// # Arguments
+///
+/// * `city` - The city to check weather for
 #[tool]
 async fn get_weather(
-    /// The city to check weather for
     city: String,
 ) -> Result<String, strands_core::StrandsError> {
     Ok(format!("22°C and sunny in {city}"))

@@ -73,7 +73,7 @@ impl ConversationManager for MyManager {
     async fn reduce_context(
         &self,
         messages: &mut Vec<Message>,
-        system_prompt: Option<&str>,
+        ctx: ReduceContext<'_>,
     ) -> Result<(), StrandsError> {
         // Your strategy here
         // Called before each model invocation

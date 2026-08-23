@@ -92,7 +92,7 @@ impl ContextInjector {
         self
     }
 
-    pub fn add(mut self, item: InjectedContent) -> Self {
+    pub fn with_content(mut self, item: InjectedContent) -> Self {
         self.items.push(item);
         self
     }
@@ -158,7 +158,7 @@ mod tests {
     use crate::types::content::CachePoint;
 
     fn injector() -> ContextInjector {
-        ContextInjector::new().add(InjectedContent::new("memory", "user prefers dark mode"))
+        ContextInjector::new().with_content(InjectedContent::new("memory", "user prefers dark mode"))
     }
 
     fn prompt_with_cache_point() -> SystemPrompt {
@@ -263,8 +263,8 @@ mod tests {
     #[test]
     fn multiple_items_are_all_injected() {
         let injector = ContextInjector::new()
-            .add(InjectedContent::new("a", "first"))
-            .add(InjectedContent::new("b", "second"));
+            .with_content(InjectedContent::new("a", "first"))
+            .with_content(InjectedContent::new("b", "second"));
 
         let text = injector.render().unwrap();
         assert!(text.contains("first") && text.contains("second"));

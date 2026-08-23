@@ -2,13 +2,24 @@ use proc_macro::TokenStream;
 
 /// Attribute macro for defining agent tools from async functions.
 ///
+/// The function's doc comment becomes the tool description. Parameter
+/// descriptions come from a rustdoc `# Arguments` section — Rust rejects doc
+/// comments in parameter position, so this is the only legal place to put them,
+/// and it is where a Rust reader would look anyway.
+///
 /// # Example
 ///
 /// ```ignore
+/// /// Get the current weather for a city.
+/// ///
+/// /// # Arguments
+/// ///
+/// /// * `city` - The city to check weather for
+/// /// * `unit` - Temperature unit (celsius or fahrenheit)
 /// #[tool]
 /// async fn get_weather(
-///     /// The city to check weather for
 ///     city: String,
+///     unit: Option<String>,
 /// ) -> Result<String, strands_core::StrandsError> {
 ///     Ok(format!("22 degrees in {city}"))
 /// }
@@ -31,8 +42,11 @@ fn tool_impl(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
     let struct_name_str = to_pascal_case(&fn_name_str);
     let struct_name = syn::Ident::new(&struct_name_str, fn_name.span());
 
-    // Extract doc comment from function for tool description
-    let description = extract_doc_comment(&func.attrs);
+    // The full doc comment carries both the description and, by rustdoc
+    // convention, the per-parameter documentation.
+    let doc_lines = extract_doc_lines(&func.attrs);
+    let description = doc_summary(&doc_lines);
+    let arg_docs = parse_argument_docs(&doc_lines);
 
     // Parse parameters (skip self if present)
     let params: Vec<_> = func
@@ -45,7 +59,13 @@ fn tool_impl(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
                     syn::Pat::Ident(ident) => ident.ident.to_string(),
                     _ => return None,
                 };
-                let doc = extract_doc_comment(&pat_type.attrs);
+                // Rust rejects doc comments on parameters, so they can only
+                // come from the function's `# Arguments` section.
+                let doc = arg_docs
+                    .iter()
+                    .find(|(param, _)| *param == name)
+                    .map(|(_, text)| text.clone())
+                    .unwrap_or_default();
                 let ty = &pat_type.ty;
                 let is_option = is_option_type(ty);
                 let json_type = rust_type_to_json_type(ty);
@@ -131,7 +151,7 @@ fn tool_impl(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
 
         pub struct #struct_name;
 
-        #[async_trait::async_trait]
+        #[::strands_core::__macro_support::async_trait]
         impl strands_core::Tool for #struct_name {
             fn name(&self) -> &str {
                 #fn_name_str
@@ -141,15 +161,18 @@ fn tool_impl(input: proc_macro2::TokenStream) -> proc_macro2::TokenStream {
                 let mut properties = serde_json::Map::new();
                 #(#schema_properties)*
 
-                strands_core::types::tools::ToolSpec {
-                    name: #fn_name_str.to_string(),
-                    description: #description.to_string(),
-                    input_schema: serde_json::json!({
+                // Built through the constructor rather than a struct literal:
+                // a literal breaks every time ToolSpec gains a field, and
+                // nothing in-tree exercises this macro to catch it.
+                strands_core::types::tools::ToolSpec::new(
+                    #fn_name_str,
+                    #description,
+                    serde_json::json!({
                         "type": "object",
                         "properties": serde_json::Value::Object(properties),
                         "required": vec![#(#required_params),*]
                     }),
-                }
+                )
             }
 
             async fn invoke(
@@ -196,7 +219,68 @@ fn to_pascal_case(s: &str) -> String {
         .collect()
 }
 
-fn extract_doc_comment(attrs: &[syn::Attribute]) -> String {
+/// The description: every line before the first `#` heading.
+fn doc_summary(lines: &[String]) -> String {
+    lines
+        .iter()
+        .take_while(|line| !line.trim_start().starts_with('#'))
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
+}
+
+/// Parse a rustdoc `# Arguments` section into `(parameter, description)` pairs.
+///
+/// Accepts the conventional forms rustdoc uses:
+/// `* \`name\` - text`, `- \`name\`: text`, and the same without backticks.
+fn parse_argument_docs(lines: &[String]) -> Vec<(String, String)> {
+    let mut pairs = Vec::new();
+    let mut in_arguments = false;
+
+    for line in lines {
+        let trimmed = line.trim();
+
+        if let Some(heading) = trimmed.strip_prefix('#') {
+            // Any other heading ends the Arguments section.
+            in_arguments = heading.trim_start_matches('#').trim().eq_ignore_ascii_case("arguments")
+                || heading.trim_start_matches('#').trim().eq_ignore_ascii_case("args");
+            continue;
+        }
+
+        if !in_arguments {
+            continue;
+        }
+
+        let Some(item) = trimmed.strip_prefix('*').or_else(|| trimmed.strip_prefix('-')) else {
+            continue;
+        };
+        let item = item.trim();
+
+        // Split the name from its description on the first separator.
+        let (name, text) = match item.find(" - ") {
+            Some(index) => (&item[..index], &item[index + 3..]),
+            None => match item.find(": ") {
+                Some(index) => (&item[..index], &item[index + 2..]),
+                None => continue,
+            },
+        };
+
+        let name = name.trim().trim_matches('`').trim();
+        if !name.is_empty() {
+            pairs.push((name.to_string(), text.trim().to_string()));
+        }
+    }
+
+    pairs
+}
+
+/// Collect a doc comment, preserving line structure.
+///
+/// Line breaks matter: the `# Arguments` section is parsed line by line, and
+/// joining with spaces (as the description path does) makes it unreadable.
+fn extract_doc_lines(attrs: &[syn::Attribute]) -> Vec<String> {
     attrs
         .iter()
         .filter_map(|attr| {
@@ -211,9 +295,9 @@ fn extract_doc_comment(attrs: &[syn::Attribute]) -> String {
             }
             None
         })
-        .collect::<Vec<_>>()
-        .join(" ")
+        .collect()
 }
+
 
 fn is_option_type(ty: &syn::Type) -> bool {
     if let syn::Type::Path(type_path) = ty {

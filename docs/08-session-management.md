@@ -23,8 +23,13 @@ Each session is saved as `{base_dir}/{session_id}.json`.
 
 Adapts any storage backend via the `SessionRepository` trait:
 
-```rust
-use strands_core::session::{RepositorySessionManager, SessionRepository};
+```rust,ignore
+// Signature listing — the bodies are elided, so this is illustrative rather
+// than compilable. The signatures are checked against the trait by hand.
+use async_trait::async_trait;
+use strands_core::session::{
+    AgentRecord, RepositorySessionManager, SessionRecord, SessionRepository,
+};
 
 struct MyDatabaseRepo { /* ... */ }
 

@@ -12,11 +12,14 @@ The simplest approach. Decorate an async function:
 use strands_core::tool;
 
 /// Get the current weather for a city.
+///
+/// # Arguments
+///
+/// * `city` - The city to check weather for
+/// * `unit` - Temperature unit (celsius or fahrenheit)
 #[tool]
 async fn get_weather(
-    /// The city to check weather for
     city: String,
-    /// Temperature unit (celsius or fahrenheit)
     unit: Option<String>,
 ) -> Result<String, strands_core::StrandsError> {
     let unit = unit.unwrap_or_else(|| "celsius".into());
@@ -81,17 +84,17 @@ impl Tool for DatabaseQuery {
     fn name(&self) -> &str { "query_database" }
 
     fn spec(&self) -> ToolSpec {
-        ToolSpec {
-            name: "query_database".into(),
-            description: "Run a SQL query".into(),
-            input_schema: json!({
+        ToolSpec::new(
+            "query_database".into(),
+            "Run a SQL query".into(),
+            json!({
                 "type": "object",
                 "properties": {
                     "sql": { "type": "string", "description": "SQL query" }
                 },
                 "required": ["sql"]
             }),
-        }
+        )
     }
 
     async fn invoke(&self, input: Value, _ctx: &ToolContext) -> Result<ToolOutput, StrandsError> {
