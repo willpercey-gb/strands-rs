@@ -76,6 +76,7 @@ fn the_advertised_name_is_the_callable_name() {
                 name: advertised.clone(),
                 arguments: json!({"hello": "world"}),
             },
+            caller: None, // stamped by BridgeClient::call
         })
         .unwrap();
 

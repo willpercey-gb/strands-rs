@@ -30,7 +30,7 @@ use std::process::Command;
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{json, Value};
 use strands_core::tool::{Tool, ToolContext};
 
 pub mod bridge;
@@ -75,6 +75,61 @@ pub struct ToolDescriptor {
     pub annotations: Option<strands_core::types::tools::ToolAnnotations>,
 }
 
+/// Identity of the session making a call.
+///
+/// One host app runs one bridge, but the MCP server is registered at user
+/// scope, so every Claude session on the machine shares it. Without this the
+/// host cannot tell ten concurrent sessions apart, and any question of the
+/// form "what is the user working on" is answered for the wrong project as
+/// often as the right one.
+///
+/// It rides on the request rather than the connection because
+/// [`BridgeClient::call`] opens a fresh TCP connection per call: there is no
+/// connection state to hang it on.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CallerInfo {
+    /// Stable for the lifetime of one shim process, which is one Claude
+    /// session. Not meaningful across restarts and not meant to be.
+    pub session: String,
+    /// Directory the session was launched in, which in practice is the
+    /// project the agent is working on. `None` if it could not be read.
+    pub cwd: Option<String>,
+    pub pid: u32,
+}
+
+/// Key under which [`CallerInfo`] is placed in [`ToolContext::state`].
+pub const CALLER_STATE_KEY: &str = "caller";
+
+impl CallerInfo {
+    /// Read the calling session's identity back out of a tool's context.
+    ///
+    /// `None` means the call is unattributed, which happens two ways: an older
+    /// shim that does not send identity, or a tool invoked by the host's own
+    /// in-process agent rather than over the bridge. Both are legitimate, so
+    /// treat it as "unknown session" rather than as an error.
+    pub fn from_context(ctx: &ToolContext) -> Option<Self> {
+        serde_json::from_value(ctx.state.get(CALLER_STATE_KEY)?.clone()).ok()
+    }
+
+    /// Capture this process's identity. Called once, when the shim starts.
+    pub fn current() -> Self {
+        let pid = std::process::id();
+        // Good enough for a local, per-process handle: pid alone is reused by
+        // the OS, so mix in the start time to keep ids distinct within a run.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        Self {
+            session: format!("{pid:x}-{nanos:x}"),
+            cwd: std::env::current_dir()
+                .ok()
+                .map(|p| p.display().to_string()),
+            pid,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "method", rename_all = "snake_case")]
 pub enum BridgeRequest {
@@ -86,6 +141,14 @@ pub enum BridgeRequest {
     Instructions,
     CallTool {
         params: CallToolParams,
+        /// Stamped by [`BridgeClient::call`], not by the caller.
+        ///
+        /// Optional so that a shim binary older than the host still works: the
+        /// shim is a build artifact copied into the app's resources, and a
+        /// stale copy must degrade to an anonymous call rather than take every
+        /// tool down. Hosts should treat `None` as "unknown session".
+        #[serde(default)]
+        caller: Option<CallerInfo>,
     },
 }
 
@@ -108,16 +171,37 @@ pub struct ToolCallResult {
 /// Synchronous: we read a single line per request.
 pub struct BridgeClient {
     addr: String,
+    caller: CallerInfo,
 }
 
 impl BridgeClient {
     pub fn new(port: u16) -> Self {
         Self {
             addr: format!("127.0.0.1:{port}"),
+            caller: CallerInfo::current(),
         }
     }
 
+    /// Identity stamped onto every `CallTool` this client sends.
+    pub fn caller(&self) -> &CallerInfo {
+        &self.caller
+    }
+
     pub fn call(&self, req: &BridgeRequest) -> Result<Value, String> {
+        // Stamped here rather than at each call site so that a future request
+        // kind cannot quietly ship without identity.
+        let stamped;
+        let req = match req {
+            BridgeRequest::CallTool { params, .. } => {
+                stamped = BridgeRequest::CallTool {
+                    params: params.clone(),
+                    caller: Some(self.caller.clone()),
+                };
+                &stamped
+            }
+            other => other,
+        };
+
         let mut stream = TcpStream::connect(&self.addr).map_err(|e| {
             format!(
                 "connect to bridge {}: {e} (is the host app running?)",
@@ -176,14 +260,24 @@ impl ToolRegistry {
             .collect()
     }
 
-    pub async fn invoke(&self, name: &str, arguments: Value) -> ToolCallResult {
+    pub async fn invoke(
+        &self,
+        name: &str,
+        arguments: Value,
+        caller: Option<CallerInfo>,
+    ) -> ToolCallResult {
         match self.tools.get(name) {
             None => ToolCallResult {
                 content: Value::String(format!("unknown tool: {name}")),
                 is_error: true,
             },
             Some(tool) => {
-                let ctx = ToolContext::default();
+                let mut ctx = ToolContext::default();
+                if let Some(caller) = caller {
+                    if let Ok(value) = serde_json::to_value(caller) {
+                        ctx.state = json!({ CALLER_STATE_KEY: value });
+                    }
+                }
                 match tool.invoke(arguments, &ctx).await {
                     Ok(out) => ToolCallResult {
                         content: out.content,

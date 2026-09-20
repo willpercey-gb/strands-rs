@@ -127,8 +127,10 @@ async fn handle_connection(
             Ok(BridgeRequest::Instructions) => {
                 json!({ "result": instructions.as_deref().unwrap_or("") })
             }
-            Ok(BridgeRequest::CallTool { params }) => {
-                let result = registry.invoke(&params.name, params.arguments).await;
+            Ok(BridgeRequest::CallTool { params, caller }) => {
+                let result = registry
+                    .invoke(&params.name, params.arguments, caller)
+                    .await;
                 json!({ "result": result })
             }
         };

@@ -213,6 +213,8 @@ fn call_tool(msg: &Value, client: &BridgeClient) -> Result<Value, (i64, String)>
     let result_value = client
         .call(&BridgeRequest::CallTool {
             params: CallToolParams { name, arguments },
+            // Filled in by `BridgeClient::call` from this process's identity.
+            caller: None,
         })
         .map_err(|e| (-32603, e))?;
 
