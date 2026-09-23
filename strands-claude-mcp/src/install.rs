@@ -1,5 +1,5 @@
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 
 use crate::cargo_target_candidates;
 
@@ -105,10 +105,24 @@ pub fn install(name: &str, port: u16) -> Result<String, String> {
 /// Unregister a previously installed server. Errors are swallowed because
 /// `claude mcp remove` exits non-zero if the server isn't registered, and
 /// callers usually don't care to distinguish that from a real failure.
+///
+/// The scopes are removed concurrently. Each one is a separate `claude`
+/// process that costs around half a second to start, and they do not depend
+/// on each other; done in sequence the wait is long enough to notice when a
+/// host calls this while shutting down.
 pub fn uninstall(name: &str) {
-    for scope in ["user", "local"] {
-        let _ = Command::new("claude")
-            .args(["mcp", "remove", name, "-s", scope])
-            .output();
+    let running: Vec<_> = ["user", "local"]
+        .into_iter()
+        .filter_map(|scope| {
+            Command::new("claude")
+                .args(["mcp", "remove", name, "-s", scope])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .ok()
+        })
+        .collect();
+    for mut child in running {
+        let _ = child.wait();
     }
 }
